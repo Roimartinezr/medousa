@@ -30,7 +30,7 @@ export interface ApiError {
 }
 
 export const analyzeEmail = async (email: string): Promise<AnalyzeEmailResponse> => {
-  const response = await fetch(`${API_BASE_URL}/analyze-email`, {
+  const response = await fetch(`http://localhost:5500/validate`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

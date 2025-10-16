@@ -7,7 +7,7 @@ import { EvidenceTable } from '@/components/EvidenceTable';
 import { JsonViewer } from '@/components/JsonViewer';
 import { HistoryTable } from '@/components/HistoryTable';
 import { LoadingSkeleton } from '@/components/LoadingSkeleton';
-import { mockAnalyzeEmail, AnalyzeEmailResponse } from '@/services/apiClient';
+import { analyzeEmail, AnalyzeEmailResponse } from '@/services/apiClient';
 import { toast } from '@/hooks/use-toast';
 import { ShieldCheck, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -59,7 +59,7 @@ const Index = () => {
 
     try {
       // Using mock API for demo. Replace with: analyzeEmail(email)
-      const response = await mockAnalyzeEmail(email);
+      const response = await analyzeEmail(email);
       
       setResult(response);
       
