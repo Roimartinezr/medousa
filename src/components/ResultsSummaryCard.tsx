@@ -10,7 +10,8 @@ interface ResultsSummaryCardProps {
 }
 
 export const ResultsSummaryCard = ({ result }: ResultsSummaryCardProps) => {
-  const isPhysical = result.veredict === 'fisico';
+  const isValid = result.veredict === 'valid';
+  const isPhishing = result.veredict === 'phishing';
   const confidencePercent = Math.round(result.confidence * 100);
   const confidenceLevel = getConfidenceLevel(result.confidence);
 
@@ -20,10 +21,12 @@ export const ResultsSummaryCard = ({ result }: ResultsSummaryCardProps) => {
       <Card className="shadow-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-xl">
-            {isPhysical ? (
+            {isValid ? (
               <ShieldCheck className="h-5 w-5 text-success" />
-            ) : (
+            ) : isPhishing ? (
               <ShieldAlert className="h-5 w-5 text-destructive" />
+            ) : (
+              <ShieldAlert className="h-5 w-5 text-warning" />
             )}
             Veredicto
           </CardTitle>
@@ -32,10 +35,10 @@ export const ResultsSummaryCard = ({ result }: ResultsSummaryCardProps) => {
         <CardContent className="space-y-4">
           <div className="flex items-center gap-3">
             <Badge 
-              variant={isPhysical ? "default" : "destructive"}
-              className={isPhysical ? 'bg-success hover:bg-success/90' : ''}
+              variant={isValid ? "default" : isPhishing ? "destructive" : "warning"}
+              className={isValid ? 'bg-success hover:bg-success/90' : ''}
             >
-              {isPhysical ? 'Físico' : 'No Físico'}
+              {isValid ? 'Valid' : isPhishing ? 'Phishing' : 'Warning'}
             </Badge>
             <span className="text-sm text-muted-foreground">
               {result.veredict_detail || 'Sin detalles adicionales'}

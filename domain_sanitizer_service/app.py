@@ -22,7 +22,7 @@ def validate():
     response = {
         "request_id": str(uuid.uuid4()),
         "email": email,
-        "veredict": sanitized_result.get("veredict", "fisico"),  # Ajusta según tu lógica
+        "veredict": sanitized_result.get("veredict", "valid"),  # Ajusta según tu lógica
         "veredict_detail": sanitized_result.get("veredict_detail", None),
         "company_impersonated": sanitized_result.get("company_impersonated", None),
         "company_detected": sanitized_result.get("company_detected", None),

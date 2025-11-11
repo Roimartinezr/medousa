@@ -87,7 +87,8 @@ export const HistoryTable = ({ history }: HistoryTableProps) => {
                 </TableRow>
               ) : (
                 filteredHistory.map((entry, index) => {
-                  const isPhysical = entry.result.veredict === 'fisico';
+                  const isValid = entry.result.veredict === 'valid';
+                  const isPhishing = entry.result.veredict === 'phishing';
                   const confidenceLevel = getConfidenceLevel(entry.result.confidence);
                   
                   return (
@@ -99,8 +100,8 @@ export const HistoryTable = ({ history }: HistoryTableProps) => {
                         {entry.result.email}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={isPhysical ? 'default' : 'destructive'} className={isPhysical ? 'bg-success hover:bg-success/90' : ''}>
-                          {isPhysical ? 'Físico' : 'No Físico'}
+                        <Badge variant={isValid ? 'default' : isPhishing ? 'destructive' : 'warning'} className={isValid ? 'bg-success hover:bg-success/90' : ''}>
+                          {isValid ? 'Valid' : isPhishing ? 'Phishing' : 'Warning'}
                         </Badge>
                       </TableCell>
                       <TableCell>

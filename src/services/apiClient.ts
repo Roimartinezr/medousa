@@ -13,7 +13,7 @@ export interface Evidence {
 export interface AnalyzeEmailResponse {
   request_id: string;
   email: string;
-  veredict: 'fisico' | 'no-fisico';
+  veredict: 'valid' | 'phishing';
   veredict_detail?: string;
   company_impersonated: string | null;
   company_detected: string | null;
@@ -58,7 +58,7 @@ export const mockAnalyzeEmail = async (email: string): Promise<AnalyzeEmailRespo
   return {
     request_id: crypto.randomUUID(),
     email,
-    veredict: isSuspicious ? 'no-fisico' : 'fisico',
+    veredict: isSuspicious ? 'phishing' : 'valid',
     veredict_detail: isSuspicious 
       ? 'Patrones sospechosos detectados en la dirección'
       : 'La dirección parece legítima',

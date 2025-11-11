@@ -3,47 +3,67 @@ import re
 from email_validator import validate_email, caching_resolver, EmailNotValidError
 from Levenshtein import distance
 import tldextract
-import httpx
+from dondominio import DonDominioAsync, get_owner_via_whois
+import asyncio
 
 
-KNOWN_BRANDS = ["bbva", "santander", "paypal", "amazon", "microsoft", "google"]
+KNOWN_BRANDS = {
+    "abanca",
+    "bbva",
+    "bancosantander",
+    "caixabank",
+    "bankia",
+    "ing",
+    "bankinter",
+    "sabadell",
+    "unicaja",
+    "kutxabank",
+    "openbank",
+    "revolut",
+    "n26",
+    "monzo",
+    "wise",
+    "binance",
+    "coinbase",
+    "paypal",
+    "amazon",
+    "microsoft",
+    "google",
+    "apple",
+    "facebook",
+    "instagram",
+    "whatsapp",
+    "outlook",
+    "office365",
+    "netflix",
+    "spotify",
+    "dropbox",
+    "adobe",
+    "dhl",
+    "fedex",
+    "ups",
+    "correos",
+    "gls",
+    "seur",
+    "mrw",
+    "chronopost",
+    "royalmail",
+    "hermes",
+    "dpd",
+    "posteitaliane",
+    "la poste",
+    "usps"
+  }
 
 OMIT_WORDS = {
     "www","mail","secure","info","login","cliente","clientes",
     "web","app","email","alerta","soporte","acceso","online",
-    "account","accounts","banco","seguridad","support"
+    "account","accounts", "seguridad","support", "admin",
+    "beta", "portal", "service", "services", "system", "verify", 
+    "verification", "update", "updates", "user", "users"
 }
 
-
-async def search_company_domains(company_name):
-    url = f"https://crt.sh/?q=%25{company_name}%25&output=json"
-    print(f"\nSearching for legitimate domains for: '{company_name}' ...")
-
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, timeout=20.0)
-
-        if response.status_code == 200:
-            certificates = response.json()
-            domains = set()
-            for cert in certificates:
-                names = cert['common_name'].split('\n')
-                for name in names:
-                    clean_name = name
-                    if clean_name.startswith("www."):
-                        clean_name = clean_name[4:]
-                    if clean_name.startswith("*."):
-                        clean_name = clean_name[2:]
-                    clean_name = clean_name.strip()
-                    domains.add(clean_name)
-            return list(domains)
-        else:
-            print("Error: could not connect to crt.sh")
-            return []
-    except httpx.ReadTimeout:
-        print("Timeout al consultar crt.sh")
-        return []
-
+# ========================= COMPANY DETECTION ==========================
 # checks if mail is a real direction
 def validate_mail(mail):
     try:
@@ -85,7 +105,6 @@ def fuzzy_brand_match(word, brands, max_dist=2):
         return best_match, best_dist
     return None, best_dist
 
-
 def extract_company_from_domain(domain, max_dist=2):
     """
     Pipeline completa:
@@ -98,7 +117,7 @@ def extract_company_from_domain(domain, max_dist=2):
 
 
     # Normalizar: minúsculas 
-    clean_domain = re.sub(r"[-.]", ".", domain.lower())
+    clean_domain = domain.lower()
 
     # tldextract para quitar subdominios y TLDs (busca en la Public Suffix List)
     # solo detecta separador de puntos, no guiones
@@ -147,3 +166,16 @@ def extract_company_from_domain(domain, max_dist=2):
     confidence = max(0, min(100, confidence))
 
     return {"company": best[0], "confidence": confidence, "source": "heuristic"}
+
+
+# ========================= DOMAIN LEGITMACY ===========================
+
+async def get_domain_owner(domain: str) -> str:
+    """
+    Devuelve el titular del dominio (.es o .com).
+    Si el dominio .com tiene privacidad (REDACTED), intenta obtener el .es equivalente.
+    """
+    async with DonDominioAsync(debug=False) as api:
+        owner = await get_owner_via_whois(api, domain)
+        return owner or "No encontrado"
+
