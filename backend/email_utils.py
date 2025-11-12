@@ -4,7 +4,6 @@ from email_validator import validate_email, caching_resolver, EmailNotValidError
 from Levenshtein import distance
 import tldextract
 from dondominio import DonDominioAsync, get_owner_via_whois
-import asyncio
 
 
 KNOWN_BRANDS = {
