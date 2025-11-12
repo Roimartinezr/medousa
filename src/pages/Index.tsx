@@ -9,7 +9,7 @@ import { HistoryTable } from '@/components/HistoryTable';
 import { LoadingSkeleton } from '@/components/LoadingSkeleton';
 import { analyzeEmail, AnalyzeEmailResponse } from '@/services/apiClient';
 import { toast } from '@/hooks/use-toast';
-import { ShieldCheck, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface HistoryEntry {
@@ -99,8 +99,12 @@ const Index = () => {
       <header className="sticky top-0 z-50 w-full border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <ShieldCheck className="h-6 w-6 text-primary" />
-            <h1 className="text-2xl font-bold">Email Risk Insight</h1>
+            <img
+              src="../../public/medousa2.png"
+              alt="Khrani icon"
+              className="h-20 w-20"
+            /> 
+            <h1 className="text-2xl font-bold">MEDOUSA</h1>
           </div>
           <p className="text-sm text-muted-foreground hidden md:block">
             Análisis de riesgo de direcciones de correo electrónico

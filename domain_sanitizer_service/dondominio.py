@@ -556,7 +556,7 @@ async def get_owner_via_whois(api: DonDominioAsync, domain: str) -> Optional[str
 async def main():
     async with DonDominioAsync(debug=False) as api:
         # Ejemplos:
-        for dom in ["paypal.com", "bancosantander.com", "bancosantander-mail.es"]:
+        for dom in ["paypal.com", "bancosantander.com", "bancosantander-mail.es", "bancosantander.mx"]:
             owner = await get_owner_via_whois(api, dom)
             print(dom, "=>", owner)
 
