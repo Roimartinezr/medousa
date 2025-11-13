@@ -2,6 +2,7 @@ import httpx
 import os
 from tranco import Tranco
 from Levenshtein import distance
+import asyncio
 
 KNOWN_BRANDS = {
     "abanca",
@@ -359,3 +360,12 @@ async def sanitize_mail_deprecated(email):
         "evidences": evidences
     }
 
+async def main():
+    l = await search_company_domains_securitytrails(
+        "bancosantander-mail.es",
+        api_key="hrtHSHu9FuTDkECIu34TawiHfLfYDTOc"
+    )
+    print(l)
+
+if __name__ == "__main__":
+    asyncio.run(main())

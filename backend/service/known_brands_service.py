@@ -156,31 +156,45 @@ def add_known_domain(brand_id: str, domain: str) -> None:
 
 def add_owner_terms(brand_id: str, owner_str: str) -> None:
     """
-    Añade tokens de WHOIS al campo owner_terms.
-    Este campo es la “bolsa de términos” que nutre el fuzzy.
+    Añade tokens de WHOIS al campo owner_terms SIN duplicados.
+    owner_terms es la “bolsa de términos” que nutre el fuzzy.
     """
     client = get_opensearch_client()
 
-    tokens = tokenize_owner_str(owner_str)
-    if not tokens:
+    # tokens nuevos (normalizados) que vienen del WHOIS actual
+    new_tokens = tokenize_owner_str(owner_str)
+    if not new_tokens:
         return
 
-    phrase = " ".join(tokens)
+    try:
+        doc = client.get(index=INDEX_KNOWN_BRANDS, id=brand_id)
+        src = doc["_source"]
+        existing_terms = src.get("owner_terms", "") or ""
+    except NotFoundError:
+        existing_terms = ""
+
+    # tokens ya existentes en la brand (normalizados igual)
+    if existing_terms:
+        existing_tokens = tokenize_owner_str(existing_terms)
+    else:
+        existing_tokens = []
+
+    # merge sin duplicados, preservando el orden “antiguos primero”
+    seen = set()
+    merged_tokens: List[str] = []
+    for t in existing_tokens + new_tokens:
+        if t not in seen:
+            seen.add(t)
+            merged_tokens.append(t)
+
+    phrase = " ".join(merged_tokens)
 
     client.update(
         index=INDEX_KNOWN_BRANDS,
         id=brand_id,
         body={
-            "script": {
-                "source": """
-                    if (ctx._source.owner_terms == null || ctx._source.owner_terms.length() == 0) {
-                        ctx._source.owner_terms = params.phrase;
-                    } else {
-                        ctx._source.owner_terms += ' ' + params.phrase;
-                    }
-                """,
-                "lang": "painless",
-                "params": {"phrase": phrase}
+            "doc": {
+                "owner_terms": phrase
             }
         }
     )
@@ -222,8 +236,12 @@ def guess_brand_from_whois(owner_str: str, max_results: int = 3) -> List[Dict]:
 def find_brand_by_known_domain(domain: str) -> Optional[Dict]:
     """
     ¿Este dominio ya pertenece a alguna brand?
+    Búsqueda por coincidencia EXACTA sobre known_domains (keyword).
     """
     client = get_opensearch_client()
+
+    # normalizamos un poco el dominio de entrada
+    domain = (domain or "").strip().lower().rstrip(".")
 
     resp = client.search(
         index=INDEX_KNOWN_BRANDS,
@@ -231,13 +249,15 @@ def find_brand_by_known_domain(domain: str) -> Optional[Dict]:
             "size": 1,
             "query": {
                 "term": {
-                    "known_domains": domain
+                    "known_domains": {
+                        "value": domain
+                    }
                 }
             }
         }
     )
 
-    hits = resp["hits"]["hits"]
+    hits = resp.get("hits", {}).get("hits", [])
     return hits[0] if hits else None
 
 def find_brand_by_canonical_domain(domain: str) -> Optional[Dict]:
@@ -260,37 +280,53 @@ def find_brand_by_canonical_domain(domain: str) -> Optional[Dict]:
     return hits[0] if hits else None
 
 
-def ensure_brand_for_root_domain(root_domain: str,
-                                 owner_str: str,
-                                 brand_id_hint: Optional[str] = None) -> str:
-    """
-    Garantiza que existe una brand para root_domain.
-    Si no existe, la crea usando owner_str para generar owner_terms.
-    Devuelve el brand_id usado.
-    """
-    existing = find_brand_by_canonical_domain(root_domain)
-    if existing:
-        return existing["_source"]["brand_id"]
+def _normalize_brand_id(s: str) -> str:
+    s = (s or "").strip().lower()
+    # nos quedamos solo con letras y números
+    return re.sub(r"[^a-z0-9]+", "", s)
 
+
+def ensure_brand_for_root_domain(
+    root_domain: str,
+    owner_str: str,
+    brand_id_hint: Optional[str] = None,
+) -> str:
+    """
+    Garantiza que exista una brand para root_domain.
+    - Si la brand NO existe → la crea (con ese root_domain como canónico).
+    - Si la brand YA existe → NO toca canonical_domain/canonical_tld,
+      solo enriquece: known_domains + owner_terms.
+    """
+    client = get_opensearch_client()
     ext = tldextract.extract(root_domain)
-    base = ext.domain or root_domain
-    tld = ext.suffix or ""
 
-    brand_id = brand_id_hint or base
+    base = brand_id_hint or ext.domain or root_domain
+    brand_id = _normalize_brand_id(base)
 
-    tokens = tokenize_owner_str(owner_str)
-    owner_terms = " ".join(tokens)
+    # ¿Ya existe la brand?
+    try:
+        doc = client.get(index=INDEX_KNOWN_BRANDS, id=brand_id)
+        # ➜ Brand existente: solo nutrimos, no pisamos el canónico
+        add_known_domain(brand_id, root_domain)
+        add_owner_terms(brand_id, owner_str)
+        return brand_id
 
-    # Keywords más potentes: por defecto el brand_id/base
-    brand_keywords = [brand_id]
+    except NotFoundError:
+        # ➜ Brand nueva: creamos canónico desde cero
+        tld = ext.suffix or ""
+        tokens = tokenize_owner_str(owner_str)
+        owner_terms = " ".join(tokens)
 
-    upsert_brand(
-        brand_id=brand_id,
-        canonical_domain=root_domain,
-        canonical_tld=tld,
-        brand_keywords=brand_keywords,
-        owner_terms=owner_terms,
-        known_domains=[root_domain]
-    )
+        # Keywords más potentes: por defecto el brand_id/base
+        brand_keywords = [brand_id]
 
-    return brand_id
+        upsert_brand(
+            brand_id=brand_id,
+            canonical_domain=root_domain,
+            canonical_tld=tld,
+            brand_keywords=brand_keywords,
+            owner_terms=owner_terms,
+            known_domains=[root_domain],
+        )
+
+        return brand_id

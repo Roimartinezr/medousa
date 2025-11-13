@@ -66,26 +66,44 @@ def extract_domain_from_email(email):
 def extract_company_from_domain(domain: str) -> Dict:
     """
     Intenta identificar una empresa basándose en el dominio usando:
-    - tokenización
+    - tokenización (incluyendo guiones)
     - eliminación de omit_words
     - fuzzy match contra brand_keywords + owner_terms en OpenSearch
     """
     ext = tldextract.extract(domain)
-    parts = []
+
+    tokens = []
+
+    def _split_tokens(raw: str):
+        # separamos por puntos y guiones
+        for part in raw.replace("-", ".").split("."):
+            p = part.strip().lower()
+            if p:
+                tokens.append(p)
 
     # extraer partes relevantes del dominio
     if ext.subdomain and ext.subdomain != "www":
-        parts.extend(ext.subdomain.split("."))
+        _split_tokens(ext.subdomain)
 
-    parts.append(ext.domain)
+    if ext.domain:
+        _split_tokens(ext.domain)
 
-    # limpiar omit words
-    filtered = [p for p in parts if not _is_omit_word(p)]
+    # limpiar omit words (mail, info, emailing, etc.)
+    filtered = [t for t in tokens if not _is_omit_word(t)]
 
+    # si después de filtrar no queda nada, usamos el dominio base sin sufijos tipo "-mail"
     if not filtered:
-        filtered = [ext.domain]  # fallback
+        base = ext.domain or ""
+        if "-" in base:
+            base = base.split("-")[0]
+        base = base.strip().lower()
+        filtered = [base] if base else []
 
-    candidate_str = " ".join(filtered)
+    # cadena candidata para buscar en OpenSearch
+    if filtered:
+        candidate_str = " ".join(filtered)
+    else:
+        candidate_str = ext.domain or domain
 
     # Fuzzy match contra las brands en OpenSearch (owner_terms + brand_keywords)
     try:
@@ -97,9 +115,14 @@ def extract_company_from_domain(domain: str) -> Dict:
         best = candidates[0]
         brand_id = best["_source"]["brand_id"]
         score = best["_score"]
-        confidence = min(1.0, score / 10)   # normalización arbitraria
+        confidence = min(1.0, score / 10.0)   # normalización arbitraria
     else:
-        brand_id = ext.domain
+        # sin match en OpenSearch: usamos el token MÁS LARGO (suele ser el nombre real)
+        if filtered:
+            longest = sorted(filtered, key=len, reverse=True)[0]
+            brand_id = longest
+        else:
+            brand_id = ext.domain or domain
         confidence = 0.0
 
     return {
@@ -107,6 +130,7 @@ def extract_company_from_domain(domain: str) -> Dict:
         "confidence": confidence * 100.0,
         "candidate_text": candidate_str,
     }
+
 
 
 # ========================= DOMAIN LEGITMACY ===========================
