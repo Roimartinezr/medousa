@@ -1,5 +1,5 @@
 # app/services/domain_sanitizer_service/sanitize_domain.py
-from email_utils import *
+from .email_utils import *
 import uuid
 import re
 
@@ -22,8 +22,6 @@ MAIL_NAMES = {
     "gmx.com",
     "mail.com"
 }
-import re
-from email_utils import distance  # ya lo tienes en tu proyecto
 
 # ------------------ Helpers ---------------------
 def _norm_owner(s: str) -> str:
@@ -147,20 +145,15 @@ async def sanitize_mail(email):
     # 3.4 Construcción de evidencias
     evidences = [
         {
-            "type": "target_company_registrant",
+            "type": root_domain,
             "value": root_owner,
             "score": 1.0,
         },
         {
-            "type": "incoming_domain_registrant",
+            "type": incoming_domain,
             "value": incoming_owner,
             "score": 0.5,
-        },
-        {
-            "type": "owners_compare",
-            "value": owners_match,
-            "score": 1.0 if owners_match else 0.0,
-        },
+        }
     ]
 
     # 3.5 Determinar relación entre dominios

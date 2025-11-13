@@ -2,10 +2,18 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import uuid
 
-from service import DomainSanitizerService
+from .service.service import DomainSanitizerService
 import asyncio
 
 from waitress import serve
+
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+logger.debug("DEBUG TEST: logging está activo")
+print("PRINT TEST: stdout está activo")
+
 
 app = Flask(__name__)
 CORS(app)

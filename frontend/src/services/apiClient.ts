@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5500';
+const API_URL = import.meta.env.VITE_API_URL || '';
 
 export interface AnalyzeEmailRequest {
   email: string;
@@ -30,7 +30,7 @@ export interface ApiError {
 }
 
 export const analyzeEmail = async (email: string): Promise<AnalyzeEmailResponse> => {
-  const response = await fetch(`${API_URL}/validate`, {
+  const response = await fetch(`http://localhost:8000/validate`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

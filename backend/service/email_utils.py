@@ -3,8 +3,11 @@ import re
 from email_validator import validate_email, caching_resolver, EmailNotValidError
 from Levenshtein import distance
 import tldextract
-from dondominio import DonDominioAsync, get_owner_via_whois
+from ..scrap.dondominio import DonDominioAsync, get_owner_via_whois
 
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 KNOWN_BRANDS = {
     "abanca",
@@ -170,6 +173,7 @@ def extract_company_from_domain(domain, max_dist=2):
 # ========================= DOMAIN LEGITMACY ===========================
 
 async def get_domain_owner(domain: str) -> str:
+    logger.debug(f"Fetching owner for domain: {domain}")
     """
     Devuelve el titular del dominio (.es o .com).
     Si el dominio .com tiene privacidad (REDACTED), intenta obtener el .es equivalente.

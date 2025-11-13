@@ -1,6 +1,6 @@
 # app/services/domain_sanitizer_service/service.py
 
-from sanitize_email import sanitize_mail
+from .sanitize_email import sanitize_mail
 
 class DomainSanitizerService:
 

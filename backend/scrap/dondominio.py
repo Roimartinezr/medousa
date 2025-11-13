@@ -11,6 +11,11 @@ import json
 import base64
 import re
 
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+
 # ---------- helpers ----------
 def _dump_short(obj: Any, n: int = 800) -> str:
     s = str(obj)
@@ -417,8 +422,23 @@ def _is_privacy_value(val: str) -> bool:
         or "data protected" in v
         or "contact privacy" in v
         or "private registrant" in v
-        or "privacy corporation"
+        or "privacy corporation" in v
+        or "domain admin" in v
     )
+
+def _clean_text(text: str) -> str:
+    """Normaliza saltos de línea, elimina códigos ANSI y etiquetas HTML"""
+    if not text:
+        return ""
+    # 1. Eliminar secuencias ANSI (colores de terminal)
+    text = re.sub(r'\x1B\[[0-?]*[ -/]*[@-~]', '', text)
+    # 2. Eliminar etiquetas HTML (href, <a>, etc.)
+    text = re.sub(r'<[^>]+>', '', text)
+    # 3. Reemplazar entidades HTML (opcional)
+    text = text.replace('&nbsp;', ' ')
+    # 4. Normalizar saltos de línea
+    text = text.replace('\r\n', '\n').replace('\r', '\n')
+    return text
 
 def _owner_from_es_block(text: str) -> Tuple[Optional[str], bool, str]:
     """
@@ -444,32 +464,51 @@ def _owner_from_es_block(text: str) -> Tuple[Optional[str], bool, str]:
     return (None, False, "ES:NoMatch")
 
 def _owner_from_com_record(record_text: str) -> Tuple[Optional[str], bool, str]:
-    """
-    .COM — dentro de un registro (un solo Domain Name).
-    Busca en este orden:
-      1) Registrant Name
-      2) Registrant Organization
-      3) Organization / Org (algunos whois)
-    """
+    record_text = _clean_text(record_text)
     lines = _norm(record_text).splitlines()
     kv = _kv_map(lines)
 
-    for key in ("registrant name",):
-        if key in kv and kv[key]:
-            owner = kv[key].strip()
-            return (None if _is_privacy_value(owner) else owner, _is_privacy_value(owner), "COM:RegistrantName")
+    def find_key(pattern: str) -> Optional[str]:
+        p = re.compile(pattern, re.I | re.UNICODE)
+        for k, v in kv.items():
+            key_clean = k.strip().replace('\u00A0', ' ').replace('-', ' ')
+            if p.fullmatch(key_clean):
+                logger.debug(f"[find_key] ✅ {key_clean!r} → {v!r}")
+                return v.strip() if v else None
+        return None
 
-    for key in ("registrant organization", "registrant organisation"):
-        if key in kv and kv[key]:
-            owner = kv[key].strip()
-            return (None if _is_privacy_value(owner) else owner, _is_privacy_value(owner), "COM:RegistrantOrganization")
+    seen_privacy = False  # solo cuenta si es en Name/Organization
 
-    for key in ("organization", "organisation", "org"):
-        if key in kv and kv[key]:
-            owner = kv[key].strip()
-            return (None if _is_privacy_value(owner) else owner, _is_privacy_value(owner), "COM:Organization")
+    # 1) Registrant Name (máxima prioridad)
+    owner = find_key(r"registrant\s+name")
+    if owner:
+        if _is_privacy_value(owner):
+            logger.debug("[COM] Registrant Name es privacidad")
+            seen_privacy = True
+        else:
+            return (owner, False, "COM:RegistrantName")
 
-    if any(k.startswith("registrant ") and _is_privacy_value(v) for k, v in kv.items()):
+    # 2) Registrant Organization / Organisation
+    owner = find_key(r"registrant\s+organ(?:i|isa)zation")
+    if owner:
+        if _is_privacy_value(owner):
+            logger.debug("[COM] Registrant Organization es privacidad")
+            seen_privacy = True
+        else:
+            return (owner, False, "COM:RegistrantOrganization")
+
+    # 3) Organization / Org genérico (evitando usarlo si es privacy)
+    owner = find_key(r"organ(?:i|isa)zation|^org$")
+    if owner:
+        if _is_privacy_value(owner):
+            logger.debug("[COM] Organization es privacidad")
+            seen_privacy = True
+        else:
+            return (owner, False, "COM:Organization")
+
+    # 4) Sin owner válido; si vimos privacidad en Name/Org → fallback
+    if seen_privacy:
+        logger.debug("[_owner_from_com_record] Detectado WHOIS con privacidad (privacy=True) -> fallback a .es")
         return (None, True, "COM:PrivacyDetected")
 
     return (None, False, "COM:NoMatch")
@@ -513,9 +552,13 @@ def extract_owner_es_com(whois_text: str, expected_domain: Optional[str] = None)
                 break
     if chosen is None:
         chosen = records[0]
-
     owner, privacy, src = _owner_from_com_record(chosen)
-    out.update({"owner": owner, "privacy": privacy, "source": src, "record_domain": _match_domain_line_com(chosen), "tld": "com"})
+    out.update({
+        "owner": owner, 
+        "privacy": privacy, 
+        "source": src, 
+        "record_domain": _match_domain_line_com(chosen), 
+        "tld": "com"})
     return out
 
 def _switch_com_to_es(domain: str) -> Optional[str]:
