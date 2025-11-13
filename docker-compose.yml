@@ -10,6 +10,8 @@ services:
       - ./backend/.env
     volumes:
       - ./backend:/app
+    depends_on:
+      - opensearch
     networks:
       - medousanet
 
@@ -23,6 +25,39 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+    networks:
+      - medousanet
+  
+  opensearch:
+    image: opensearchproject/opensearch:2.15.0
+    container_name: opensearch
+    environment:
+      - discovery.type=single-node
+      - cluster.name=medousa-cluster
+      - node.name=medousa-node-1
+      - plugins.security.disabled=true
+      - bootstrap.memory_lock=true
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    networks:
+      - medousanet
+
+  opensearch-dashboards:   # OPCIONAL, GUI
+    image: opensearchproject/opensearch-dashboards:2.15.0
+    container_name: opensearch-dashboards
+    depends_on:
+      - opensearch
+    environment:
+      - OPENSEARCH_HOSTS=["http://opensearch:9200"]
+      - OPENSEARCH_SECURITY_ENABLED=false
     networks:
       - medousanet
 

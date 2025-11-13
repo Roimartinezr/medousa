@@ -17,3 +17,12 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+
+  opensearch:
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+
+  opensearch-dashboards:
+    ports:
+      - "5601:5601"

@@ -1,5 +1,5 @@
 # app/services/domain_sanitizer_service/sanitize_domain.py
-from .email_utils import *
+from .utils.email_utils import *
 import uuid
 import re
 

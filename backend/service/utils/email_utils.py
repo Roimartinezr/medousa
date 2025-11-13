@@ -3,7 +3,7 @@ import re
 from email_validator import validate_email, caching_resolver, EmailNotValidError
 from Levenshtein import distance
 import tldextract
-from ..scrap.dondominio import DonDominioAsync, get_owner_via_whois
+from .dondominio import DonDominioAsync, get_owner_via_whois
 
 import logging
 logger = logging.getLogger(__name__)
