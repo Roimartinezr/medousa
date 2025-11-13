@@ -1,69 +1,42 @@
 # app/services/domain_sanitizer_service/email_utils.py
 import re
+from typing import Dict
 from email_validator import validate_email, caching_resolver, EmailNotValidError
-from Levenshtein import distance
 import tldextract
 from .dondominio import DonDominioAsync, get_owner_via_whois
-
+from ..known_brands_service import guess_brand_from_whois
+from ..omit_words_service import get_all_omit_words
 import logging
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-KNOWN_BRANDS = {
-    "abanca",
-    "bbva",
-    "bancosantander",
-    "caixabank",
-    "bankia",
-    "ing",
-    "bankinter",
-    "sabadell",
-    "unicaja",
-    "kutxabank",
-    "openbank",
-    "revolut",
-    "n26",
-    "monzo",
-    "wise",
-    "binance",
-    "coinbase",
-    "paypal",
-    "amazon",
-    "microsoft",
-    "google",
-    "apple",
-    "facebook",
-    "instagram",
-    "whatsapp",
-    "outlook",
-    "office365",
-    "netflix",
-    "spotify",
-    "dropbox",
-    "adobe",
-    "dhl",
-    "fedex",
-    "ups",
-    "correos",
-    "gls",
-    "seur",
-    "mrw",
-    "chronopost",
-    "royalmail",
-    "hermes",
-    "dpd",
-    "posteitaliane",
-    "la poste",
-    "usps"
-  }
+OMIT_WORDS_CACHE = set()
+OMIT_WORDS_LOADED = False
 
-OMIT_WORDS = {
-    "www","mail","secure","info","login","cliente","clientes",
-    "web","app","email","alerta","soporte","acceso","online",
-    "account","accounts", "seguridad","support", "admin",
-    "beta", "portal", "service", "services", "system", "verify", 
-    "verification", "update", "updates", "user", "users"
-}
+def _load_omit_words_cache():
+    """
+    Carga las omit_words desde OpenSearch solo una vez.
+    Si no se puede conectar, deja el set vacío y no rompe el arranque.
+    """
+    global OMIT_WORDS_CACHE, OMIT_WORDS_LOADED
+    if OMIT_WORDS_LOADED:
+        return
+
+    try:
+        words = get_all_omit_words()
+        OMIT_WORDS_CACHE = set(words)
+        OMIT_WORDS_LOADED = True
+    except Exception as e:
+        # Aquí podrías loguear si quieres, pero NO rompas el arranque
+        # print(f"[WARN] No se pudieron cargar omit_words: {e}")
+        OMIT_WORDS_CACHE = set()
+        OMIT_WORDS_LOADED = True  # marcamos como "intentado" para no buclear
+
+def _is_omit_word(word: str) -> bool:
+    if not OMIT_WORDS_LOADED:
+        _load_omit_words_cache()
+    return word in OMIT_WORDS_CACHE
 
 # ========================= COMPANY DETECTION ==========================
 # checks if mail is a real direction
@@ -89,85 +62,51 @@ def extract_domain_from_email(email):
     except IndexError:
         return None
 
-def fuzzy_brand_match(word, brands, max_dist=2):
+
+def extract_company_from_domain(domain: str) -> Dict:
     """
-    Devuelve la marca más cercana a 'word' usando distancia de Levenshtein.
-    max_dist define la tolerancia (número de ediciones permitidas).
+    Intenta identificar una empresa basándose en el dominio usando:
+    - tokenización
+    - eliminación de omit_words
+    - fuzzy match contra brand_keywords + owner_terms en OpenSearch
     """
-    best_match = None
-    best_dist = 99
+    ext = tldextract.extract(domain)
+    parts = []
 
-    for b in brands:
-        d = distance(word.lower(), b.lower())
-        if d < best_dist:
-            best_dist = d
-            best_match = b
+    # extraer partes relevantes del dominio
+    if ext.subdomain and ext.subdomain != "www":
+        parts.extend(ext.subdomain.split("."))
 
-    if best_dist <= max_dist:
-        return best_match, best_dist
-    return None, best_dist
+    parts.append(ext.domain)
 
-def extract_company_from_domain(domain, max_dist=2):
-    """
-    Pipeline completa:
-    1. Normaliza el dominio
-    2. Extrae candidatos
-    3. Pondera por posición
-    4. Aplica fuzzy matching contra marcas conocidas
-    5. Devuelve la compañía más probable + score de confianza
-    """
+    # limpiar omit words
+    filtered = [p for p in parts if not _is_omit_word(p)]
 
+    if not filtered:
+        filtered = [ext.domain]  # fallback
 
-    # Normalizar: minúsculas 
-    clean_domain = domain.lower()
+    candidate_str = " ".join(filtered)
 
-    # tldextract para quitar subdominios y TLDs (busca en la Public Suffix List)
-    # solo detecta separador de puntos, no guiones
-    clean_domain = tldextract.extract(clean_domain).domain  # extrae solo el dominio base
+    # Fuzzy match contra las brands en OpenSearch (owner_terms + brand_keywords)
+    try:
+        candidates = guess_brand_from_whois(candidate_str)
+    except Exception:
+        candidates = []
 
-    # Separar los posibles prefijos restantes
-    words = re.sub(r"[-.]", " ", clean_domain).split(" ")
-    # Contrastar contra la whitelist de palabras omitibles, palabra por palaba de words
-    candidates = [w for w in words if w not in OMIT_WORDS and len(w) >= 2]
+    if candidates:
+        best = candidates[0]
+        brand_id = best["_source"]["brand_id"]
+        score = best["_score"]
+        confidence = min(1.0, score / 10)   # normalización arbitraria
+    else:
+        brand_id = ext.domain
+        confidence = 0.0
 
-    # Si no hay candidatos = romper convenio de dominio antes del (.com, .org, etc) = posible fraude
-    if not candidates:
-        # fallback: no quedan candidatos tras limpiar
-        return {"company": None, "confidence": 0, "source": "no_candidates"}
-
-    scored = []
-    n = len(candidates)
-
-    for i, w in enumerate(candidates):
-        # Elimina subcadenas que coincidan con OMIT_WORDS
-        for omit in OMIT_WORDS:
-            if omit in w:
-                w = w.replace(omit, "")
-        w_norm = w.strip()
-
-        # Puntuación base por posición
-        score = 0
-        if i == 0: score += 1       # inicio
-        if i == n // 2: score += 2  # centro
-        if i == n - 1: score += 1   # final
-
-        # Fuzzy matching contra marcas conocidas
-        match, dist = fuzzy_brand_match(w_norm, KNOWN_BRANDS, max_dist=max_dist)
-        if match:
-            score += 3  # bonificación por match cercano
-            scored.append((match, score, dist))
-        else:
-            scored.append((w_norm, score, dist))
-
-    # Elegir la palabra/marca con mayor score, y en empate la más parecida
-    scored.sort(key=lambda x: (x[1], -x[2]), reverse=True)
-    best = scored[0]
-
-    # Calcular confianza (heurística simple)
-    confidence = 50 + best[1]*10 - best[2]*5
-    confidence = max(0, min(100, confidence))
-
-    return {"company": best[0], "confidence": confidence, "source": "heuristic"}
+    return {
+        "company": brand_id,
+        "confidence": confidence * 100.0,
+        "candidate_text": candidate_str,
+    }
 
 
 # ========================= DOMAIN LEGITMACY ===========================

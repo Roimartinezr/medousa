@@ -1,6 +1,101 @@
 import httpx
 import os
 from tranco import Tranco
+from Levenshtein import distance
+
+KNOWN_BRANDS = {
+    "abanca",
+    "bbva",
+    "bancosantander",
+    "caixabank",
+    "bankia",
+    "ing",
+    "bankinter",
+    "sabadell",
+    "unicaja",
+    "kutxabank",
+    "openbank",
+    "revolut",
+    "n26",
+    "monzo",
+    "wise",
+    "binance",
+    "coinbase",
+    "paypal",
+    "amazon",
+    "microsoft",
+    "google",
+    "apple",
+    "facebook",
+    "instagram",
+    "whatsapp",
+    "outlook",
+    "office365",
+    "netflix",
+    "spotify",
+    "dropbox",
+    "adobe",
+    "dhl",
+    "fedex",
+    "ups",
+    "correos",
+    "gls",
+    "seur",
+    "mrw",
+    "chronopost",
+    "royalmail",
+    "hermes",
+    "dpd",
+    "posteitaliane",
+    "la poste",
+    "usps"
+  }
+
+OMIT_WORDS = {
+    "www","mail","secure","info","login","cliente","clientes",
+    "web","app","email","alerta","soporte","acceso","online",
+    "account","accounts", "seguridad","support", "admin",
+    "beta", "portal", "service", "services", "system", "verify", 
+    "verification", "update", "updates", "user", "users"
+}
+
+MAIL_NAMES = {
+    "gmail.com",
+    "outlook.com",
+    "hotmail.com",
+    "live.com",
+    "yahoo.com",
+    "ymail.com",
+    "icloud.com",
+    "me.com",
+    "mac.com",
+    "proton.me",
+    "protonmail.com",
+    "zoho.com",
+    "zohomail.com",
+    "aol.com",
+    "gmx.com",
+    "mail.com"
+}
+
+def fuzzy_brand_match(word, brands, max_dist=2):
+    """
+    Devuelve la marca más cercana a 'word' usando distancia de Levenshtein.
+    max_dist define la tolerancia (número de ediciones permitidas).
+    """
+    best_match = None
+    best_dist = 99
+
+    for b in brands:
+        d = distance(word.lower(), b.lower())
+        if d < best_dist:
+            best_dist = d
+            best_match = b
+
+    if best_dist <= max_dist:
+        return best_match, best_dist
+    return None, best_dist
+
 
 async def search_company_domains_crtsh(company_name):
     url = f"https://crt.sh/?q=%25{company_name}%25&output=json"
@@ -107,3 +202,160 @@ def find_tranco(src_root_domain: str):
     custom_list.sort(key=lambda x: x[1])  
 
     return custom_list
+
+async def sanitize_mail_deprecated(email):
+    # 1. Validar y limpiar el email
+    v_mail = validate_mail(email.strip().lower())
+
+    if not v_mail:
+        if re.search(r"\bno[\-_]?reply\b", email, re.IGNORECASE):
+            v_mail = email
+        else:
+            return {
+                "request_id": str(uuid.uuid4()),
+                "email": email,
+                "veredict": "phishing",
+                "veredict_detail": "The domain name does not exist",
+                "company_impersonated": None,
+                "company_detected": None,
+                "confidence": 0.0,
+                "labels": ["invalid-format"],
+                "evidences": []
+            }
+    elif v_mail != email:
+        return {
+            "request_id": str(uuid.uuid4()),
+            "email": email,
+            "veredict": "phishing",
+            "veredict_detail": "Ascii anomaly detected",
+            "company_impersonated": None,
+            "company_detected": None,
+            "confidence": 0.0,
+            "labels": ["invalid-format", "ascii-anomaly"],
+            "evidences": []
+        }
+    
+    incoming_domain = extract_domain_from_email(v_mail)
+    if not incoming_domain:
+        return {
+            "request_id": str(uuid.uuid4()),
+            "email": email,
+            "veredict": "phishing",
+            "veredict_detail": "Invalid email format",
+            "company_impersonated": None,
+            "company_detected": None,
+            "confidence": 0.0,
+            "labels": ["invalid-format"],
+            "evidences": []
+        }
+    elif incoming_domain in MAIL_NAMES:
+        return {
+            "request_id": str(uuid.uuid4()),
+            "email": email,
+            "veredict": "valid",
+            "veredict_detail": "General-supplier's domain",
+            "company_impersonated": None,
+            "company_detected": None,
+            "confidence": 1.0,
+            "labels": [incoming_domain.split('.')[0], "general-supplier"],
+            "evidences": []
+        }
+
+    # 2. Detectar la empresa
+    json_response = extract_company_from_domain(incoming_domain)
+    target_company = json_response["company"]
+    confidence = json_response["confidence"] / 100.0
+    company_detected = target_company
+    
+
+    # 3. Buscar dominios legítimos
+    # 3.1 Construir root domain
+    tld = tldextract.extract(incoming_domain).suffix
+    root_domain = f"{target_company}.{tld}"
+    
+    # 3.2 Obtener titulares (owners)
+    root_owner = await get_domain_owner(root_domain)
+    incoming_owner = await get_domain_owner(incoming_domain)
+
+    # 3.3 Comparar titulares (fuzzy + contención)
+    owners_match = False
+    similarity = 0.0
+
+    if root_owner != "No encontrado" and incoming_owner != "No encontrado":
+        if _owners_simple_match(root_owner, incoming_owner):
+            owners_match = True
+            similarity = 1.0
+        else:
+            similarity = _owners_similarity(root_owner, incoming_owner)
+            owners_match = similarity >= 0.90  # umbral ajustable
+
+    # 3.4 Construcción de evidencias
+    evidences = [
+        {
+            "type": root_domain,
+            "value": root_owner,
+            "score": 1.0,
+        },
+        {
+            "type": incoming_domain,
+            "value": incoming_owner,
+            "score": 0.5,
+        }
+    ]
+
+    # 3.5 Determinar relación entre dominios
+    root_dom_norm = _norm_domain(root_domain)
+    incoming_dom_norm = _norm_domain(incoming_domain)
+
+    if incoming_dom_norm and incoming_dom_norm == root_dom_norm:
+        result = 1
+    elif incoming_dom_norm and _is_subdomain(incoming_dom_norm, root_dom_norm):
+        result = 2
+    else:
+        result = 0
+
+    # 3.6 Determinar veredicto global
+    if result == 1 and owners_match:
+        veredict = "valid"
+        veredict_detail = "Dominio legítimo y titular coincidente"
+        labels = ["legitimate", "owner-match"]
+        confidence = 1.0
+        company_impersonated = None
+    elif result == 2 and owners_match:
+        veredict = "valid"
+        veredict_detail = "Subdominio legítimo con titular WHOIS coincidente"
+        labels = ["subdomain", "owner-match"]
+        confidence = 0.85
+        company_impersonated = None
+    elif result == 0 and owners_match:
+        veredict = "valid"
+        veredict_detail = "Dominio no relacionado, pero titular WHOIS coincide"
+        labels = ["suspicious", "owner-match"]
+        confidence = 0.7
+        company_impersonated = company_detected
+    elif result in (1, 2) and not owners_match:
+        veredict = "warning"
+        veredict_detail = "Dominio legítimo, pero titular WHOIS distinto"
+        labels = ["owner-mismatch"]
+        confidence = 0.6
+        company_impersonated = company_detected
+    else:
+        veredict = "phishing"
+        veredict_detail = "Dominio o titular no coincide con la empresa objetivo"
+        labels = ["suspicious", "owner-mismatch"]
+        confidence = 0.0
+        company_impersonated = company_detected
+
+
+    return {
+        "request_id": str(uuid.uuid4()),
+        "email": email,
+        "veredict": veredict,
+        "veredict_detail": veredict_detail,
+        "company_impersonated": company_impersonated,
+        "company_detected": company_detected,
+        "confidence": confidence,
+        "labels": labels,
+        "evidences": evidences
+    }
+

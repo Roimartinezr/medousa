@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   backend:
     build: ./backend
@@ -8,6 +6,9 @@ services:
       - "8000:8000"
     env_file:
       - ./backend/.env
+    environment:
+    - OPENSEARCH_HOST=opensearch
+    - OPENSEARCH_PORT=9200
     volumes:
       - ./backend:/app
     depends_on:
@@ -35,7 +36,15 @@ services:
       - discovery.type=single-node
       - cluster.name=medousa-cluster
       - node.name=medousa-node-1
+
+      # Desactivar seguridad para desarrollo
       - plugins.security.disabled=true
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+
+      # Poner una contraseña inicial (obligatorio 2.12+)
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=MedousaAdminPass_123!
+
+      # memoria
       - bootstrap.memory_lock=true
       - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
     ulimits:
@@ -53,13 +62,18 @@ services:
   opensearch-dashboards:   # OPCIONAL, GUI
     image: opensearchproject/opensearch-dashboards:2.15.0
     container_name: opensearch-dashboards
-    depends_on:
-      - opensearch
+    ports:
+      - "5601:5601"
     environment:
-      - OPENSEARCH_HOSTS=["http://opensearch:9200"]
-      - OPENSEARCH_SECURITY_ENABLED=false
+      OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
+      DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"
     networks:
       - medousanet
+    depends_on:
+      - opensearch
 
 networks:
   medousanet:
+
+volumes:
+  opensearch-data:

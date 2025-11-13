@@ -44,4 +44,7 @@ def validate():
     return jsonify(response), 200
 
 if __name__ == '__main__':
+    DomainSanitizerService.ensure_mail_names_index()
+    DomainSanitizerService.ensure_omit_words_index()
+    DomainSanitizerService.ensure_known_brands_index()
     serve(app, host='0.0.0.0', port=8000)

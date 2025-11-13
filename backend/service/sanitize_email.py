@@ -1,27 +1,11 @@
 # app/services/domain_sanitizer_service/sanitize_domain.py
 from .utils.email_utils import *
+from .known_brands_service import *
+from .mail_names_service import is_personal_mail_domain
+from .known_brands_service import *
 import uuid
 import re
-
-MAIL_NAMES = {
-
-    "gmail.com",
-    "outlook.com",
-    "hotmail.com",
-    "live.com",
-    "yahoo.com",
-    "ymail.com",
-    "icloud.com",
-    "me.com",
-    "mac.com",
-    "proton.me",
-    "protonmail.com",
-    "zoho.com",
-    "zohomail.com",
-    "aol.com",
-    "gmx.com",
-    "mail.com"
-}
+from Levenshtein import distance
 
 # ------------------ Helpers ---------------------
 def _norm_owner(s: str) -> str:
@@ -55,12 +39,12 @@ def _is_subdomain(child: str, parent: str) -> bool:
     p = _norm_domain(parent)
     return bool(p) and c.endswith(p) and c != p
 
-
 async def sanitize_mail(email):
-    # 1. Validar y limpiar el email
+    # 1. Validar y normalizar el email
     v_mail = validate_mail(email.strip().lower())
 
     if not v_mail:
+        # Permitir no-reply raros, como tenías
         if re.search(r"\bno[\-_]?reply\b", email, re.IGNORECASE):
             v_mail = email
         else:
@@ -73,9 +57,10 @@ async def sanitize_mail(email):
                 "company_detected": None,
                 "confidence": 0.0,
                 "labels": ["invalid-format"],
-                "evidences": []
+                "evidences": [],
             }
     elif v_mail != email:
+        # Anomalías ASCII
         return {
             "request_id": str(uuid.uuid4()),
             "email": email,
@@ -85,9 +70,10 @@ async def sanitize_mail(email):
             "company_detected": None,
             "confidence": 0.0,
             "labels": ["invalid-format", "ascii-anomaly"],
-            "evidences": []
+            "evidences": [],
         }
-    
+
+    # 2. Extraer dominio entrante
     incoming_domain = extract_domain_from_email(v_mail)
     if not incoming_domain:
         return {
@@ -99,9 +85,11 @@ async def sanitize_mail(email):
             "company_detected": None,
             "confidence": 0.0,
             "labels": ["invalid-format"],
-            "evidences": []
+            "evidences": [],
         }
-    elif incoming_domain in MAIL_NAMES:
+
+    # 2.1 Proveedor generalista (mail_names en OpenSearch)
+    if is_personal_mail_domain(incoming_domain):
         return {
             "request_id": str(uuid.uuid4()),
             "email": email,
@@ -110,39 +98,127 @@ async def sanitize_mail(email):
             "company_impersonated": None,
             "company_detected": None,
             "confidence": 1.0,
-            "labels": [incoming_domain.split('.')[0], "general-supplier"],
-            "evidences": []
+            "labels": [incoming_domain.split(".")[0], "general-supplier"],
+            "evidences": [],
         }
 
-    # 2. Detectar la empresa
-    json_response = extract_company_from_domain(incoming_domain)
-    target_company = json_response["company"]
-    confidence = json_response["confidence"] / 100.0
-    company_detected = target_company
-    
+    # ======================================================
+    # 3. DETECCIÓN DE BRAND & ROOT DOMAIN
+    # ======================================================
 
-    # 3. Buscar dominios legítimos
-    # 3.1 Construir root domain
-    tld = tldextract.extract(incoming_domain).suffix
-    root_domain = f"{target_company}.{tld}"
-    
-    # 3.2 Obtener titulares (owners)
-    root_owner = await get_domain_owner(root_domain)
+    # 3.1 Heurística antigua para sacar "company base" del dominio
+    domain_info = extract_company_from_domain(incoming_domain)
+    base_company = domain_info["company"]  # ej: "bancosantander"
+    confidence = (domain_info.get("confidence") or 0) / 100.0
+
+    # 3.2 Root domain candidato con el TLD del dominio entrante
+    ext = tldextract.extract(incoming_domain)
+    tld = ext.suffix
+    root_domain = f"{base_company}.{tld}" if base_company and tld else incoming_domain
+
+    company_detected = base_company or None
+    brand_id = None
+    brand_doc = None
+
+    # 3.3 Primero: comprobar si el dominio entrante ya es conocido
+    brand_doc = find_brand_by_known_domain(incoming_domain)
+    if brand_doc:
+        src = brand_doc["_source"]
+        brand_id = src.get("brand_id")
+        canonical_domain = src.get("canonical_domain") or root_domain
+        root_domain = canonical_domain
+        company_detected = brand_id or company_detected
+        confidence = max(confidence, 1.0)  # dominio conocido = confianza alta
+    else:
+        # 3.4 Si no, mirar si ya tenemos brand por canonical_domain
+        brand_doc = find_brand_by_canonical_domain(root_domain)
+        if brand_doc:
+            src = brand_doc["_source"]
+            brand_id = src.get("brand_id")
+            company_detected = brand_id or company_detected
+            # aquí NO tiramos WHOIS del root_domain, usamos solo OpenSearch
+        else:
+            # 3.5 No existe aún brand en OpenSearch para este root_domain
+            # Aquí sí está permitido hacer WHOIS del root_domain
+            root_owner = await get_domain_owner(root_domain)
+            if root_owner != "No encontrado":
+                # Creamos brand con el saco de palabras del owner del root
+                brand_id = ensure_brand_for_root_domain(
+                    root_domain=root_domain,
+                    owner_str=root_owner,
+                    brand_id_hint=base_company or None,
+                )
+                company_detected = brand_id or company_detected
+                # y añadimos el root_domain como conocido en esa brand
+                try:
+                    add_known_domain(brand_id, root_domain)
+                except Exception:
+                    pass
+            else:
+                # No hay owner del root_domain; nos quedamos solo con la heurística
+                brand_id = base_company or None
+                company_detected = brand_id or company_detected
+
+    # ======================================================
+    # 4. WHOIS DEL DOMINIO ENTRANTE + FUZZY VS BRAND
+    # ======================================================
+
     incoming_owner = await get_domain_owner(incoming_domain)
 
-    # 3.3 Comparar titulares (fuzzy + contención)
     owners_match = False
     similarity = 0.0
 
-    if root_owner != "No encontrado" and incoming_owner != "No encontrado":
-        if _owners_simple_match(root_owner, incoming_owner):
-            owners_match = True
-            similarity = 1.0
-        else:
-            similarity = _owners_similarity(root_owner, incoming_owner)
-            owners_match = similarity >= 0.90  # umbral ajustable
+    # Sólo tiene sentido fuzzy si tenemos algún owner entrante
+    if incoming_owner != "No encontrado" and brand_id:
+        # Usamos el “perfil léxico” de known_brands (brand_keywords + owner_terms)
+        # para intentar mapear el incoming_owner a una brand.
+        try:
+            candidates = guess_brand_from_whois(incoming_owner, max_results=3)
+        except Exception:
+            candidates = []
 
-    # 3.4 Construcción de evidencias
+        if candidates:
+            best = candidates[0]
+            best_src = best.get("_source", {})
+            guessed_brand_id = best_src.get("brand_id")
+            es_misma_brand = guessed_brand_id == brand_id
+
+            if es_misma_brand:
+                owners_match = True
+                # Podrías usar best["_score"] para afinar; por ahora lo simplificamos:
+                similarity = 1.0
+                confidence = max(confidence, 0.8)
+
+                # Nutrición: añadimos dominio y owner al índice de la brand
+                try:
+                    add_known_domain(brand_id, incoming_domain)
+                    add_owner_terms(brand_id, incoming_owner)
+                except Exception:
+                    pass
+
+    # ======================================================
+    # 5. RELACIÓN ENTRE DOMINIOS (root vs incoming)
+    # ======================================================
+
+    # Aquí NO llamamos WHOIS del root_domain si ya existía en OpenSearch;
+    # pero sí usamos root_domain como tal para ver si el incoming es subdominio.
+    root_dom_norm = _norm_domain(root_domain)
+    incoming_dom_norm = _norm_domain(incoming_domain)
+
+    if incoming_dom_norm and incoming_dom_norm == root_dom_norm:
+        result = 1  # mismo dominio base
+    elif incoming_dom_norm and _is_subdomain(incoming_dom_norm, root_dom_norm):
+        result = 2  # subdominio
+    else:
+        result = 0  # dominio ajeno
+
+    # Para evidencias, como no siempre tenemos WHOIS del root_domain,
+    # dejamos root_owner como "from-opensearch" cuando no lo hemos pedido.
+    if "root_owner" in locals():
+        root_owner = root_owner
+    else:
+        root_owner = f"Profiled brand: {brand_id}" if brand_id else "Not available"
+
     evidences = [
         {
             "type": root_domain,
@@ -153,52 +229,47 @@ async def sanitize_mail(email):
             "type": incoming_domain,
             "value": incoming_owner,
             "score": 0.5,
-        }
+        },
     ]
 
-    # 3.5 Determinar relación entre dominios
-    root_dom_norm = _norm_domain(root_domain)
-    incoming_dom_norm = _norm_domain(incoming_domain)
+    # ======================================================
+    # 6. VEREDICTO GLOBAL (basado en tu lógica anterior)
+    # ======================================================
 
-    if incoming_dom_norm and incoming_dom_norm == root_dom_norm:
-        result = 1
-    elif incoming_dom_norm and _is_subdomain(incoming_dom_norm, root_dom_norm):
-        result = 2
-    else:
-        result = 0
-
-    # 3.6 Determinar veredicto global
     if result == 1 and owners_match:
         veredict = "valid"
-        veredict_detail = "Dominio legítimo y titular coincidente"
+        veredict_detail = "Dominio legítimo y titular coincidente (perfil OpenSearch)"
         labels = ["legitimate", "owner-match"]
-        confidence = 1.0
+        confidence = max(confidence, 1.0)
         company_impersonated = None
+
     elif result == 2 and owners_match:
         veredict = "valid"
-        veredict_detail = "Subdominio legítimo con titular WHOIS coincidente"
+        veredict_detail = "Subdominio legítimo con titular coincidente (perfil OpenSearch)"
         labels = ["subdomain", "owner-match"]
-        confidence = 0.85
+        confidence = max(confidence, 0.85)
         company_impersonated = None
+
     elif result == 0 and owners_match:
         veredict = "valid"
-        veredict_detail = "Dominio no relacionado, pero titular WHOIS coincide"
+        veredict_detail = "Dominio no relacionado, pero titular encaja con brand conocida"
         labels = ["suspicious", "owner-match"]
-        confidence = 0.7
+        confidence = max(confidence, 0.7)
         company_impersonated = company_detected
+
     elif result in (1, 2) and not owners_match:
         veredict = "warning"
-        veredict_detail = "Dominio legítimo, pero titular WHOIS distinto"
+        veredict_detail = "Dominio legítimo, pero titular WHOIS no encaja con la brand"
         labels = ["owner-mismatch"]
-        confidence = 0.6
+        confidence = max(confidence, 0.6)
         company_impersonated = company_detected
+
     else:
         veredict = "phishing"
         veredict_detail = "Dominio o titular no coincide con la empresa objetivo"
         labels = ["suspicious", "owner-mismatch"]
-        confidence = 0.0
+        confidence = min(confidence, 0.3)
         company_impersonated = company_detected
-
 
     return {
         "request_id": str(uuid.uuid4()),
@@ -209,6 +280,8 @@ async def sanitize_mail(email):
         "company_detected": company_detected,
         "confidence": confidence,
         "labels": labels,
-        "evidences": evidences
+        "evidences": evidences,
     }
+
+
 
