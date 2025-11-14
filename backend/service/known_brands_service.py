@@ -306,9 +306,10 @@ def find_brand_by_known_domain(domain: str) -> Optional[Dict]:
     hits = resp.get("hits", {}).get("hits", [])
     return hits[0] if hits else None
 
-def find_brand_by_canonical_domain(domain: str) -> Optional[Dict]:
+def find_canonical_domain_by_keywords(domain: str) -> Optional[str]:
     """
-    Busca una brand cuyo canonical_domain sea exactamente 'domain'.
+    Busca una brand cuyo campo 'keywords' tenga similitud con el dominio.
+    Devuelve el canonical_domain si hay coincidencias.
     """
     client = get_opensearch_client()
     resp = client.search(
@@ -316,8 +317,11 @@ def find_brand_by_canonical_domain(domain: str) -> Optional[Dict]:
         body={
             "size": 1,
             "query": {
-                "term": {
-                    "canonical_domain": domain
+                "match": {
+                    "keywords": {
+                        "query": domain,
+                        "fuzziness": "AUTO"
+                    }
                 }
             }
         }

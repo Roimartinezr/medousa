@@ -8,6 +8,11 @@ import uuid
 import re
 from Levenshtein import distance
 
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
 # ------------------ Helpers ---------------------
 def _norm_owner(s: str) -> str:
     if not s:
@@ -180,8 +185,13 @@ async def sanitize_mail(email):
     if brand_doc:
         src_tmp = brand_doc["_source"]
         kd_tmp = set(src_tmp.get("known_domains", []))
-        if incoming_domain not in kd_tmp and dns_root_domain not in kd_tmp:
+        norm_incoming = _norm_domain(incoming_domain)
+        norm_dns_root = _norm_domain(dns_root_domain)
+        norm_known = {_norm_domain(d) for d in kd_tmp}
+
+        if norm_incoming not in norm_known and norm_dns_root not in norm_known:
             brand_doc = None
+
 
     new_brand = False
     if brand_doc:
@@ -205,7 +215,8 @@ async def sanitize_mail(email):
 
     else:
         # 3.4 Mirar si ya tenemos brand por canonical_domain (root lógico)
-        brand_doc = find_brand_by_canonical_domain(root_domain)
+        brand_doc = find_canonical_domain_by_keywords(ext.domain)
+        logger.debug(f'=================== {brand_doc}')
         if brand_doc:
             src = brand_doc["_source"]
             brand_id = src.get("brand_id")
@@ -325,35 +336,35 @@ async def sanitize_mail(email):
 
     # root_owner para evidencias:
     if root_owner is None:
-        root_owner = "Dominio Canónico; WHOIS no necesario"
+        root_owner = "Dominio Canónico"
 
     evidences = [
         {
-            "type": root_domain,
-            "value": root_owner,
-            "score": 1.0,
+            "domain": root_domain,
+            "owner": root_owner,
+            "detail": "Detected Root Domain",
         },
         {
-            "type": incoming_domain,
-            "value": incoming_owner,
-            "score": 0.8 if owners_match else 0.4,
+            "domain": incoming_domain,
+            "owner": incoming_owner,
+            "detail": "Incoming Root Domain",
         },
     ]
 
     if relation == 1:
         evidences = [
             {
-                "type": root_domain,
-                "value": root_owner,
-                "score": 1.0,
+                "domain": root_domain,
+                "owner": root_owner,
+                "detail": "Root Domain",
             },
         ]
     elif relation == 2:
         evidences.append(
             {
-                "type": incoming_domain,
+                "domain": incoming_domain,
                 "value": f"Subdominio de: {dns_root_domain}",
-                "score": 0.8 if owners_match else 0.4,
+                "detail": "Canonical Domain Subdomain",
             }
         )
 

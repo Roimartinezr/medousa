@@ -362,7 +362,7 @@ async def sanitize_mail_deprecated(email):
 
 async def main():
     l = await search_company_domains_securitytrails(
-        "corteingles.es",
+        "mercadona.es",
         api_key="hrtHSHu9FuTDkECIu34TawiHfLfYDTOc"
     )
     print(l)

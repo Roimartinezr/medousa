@@ -9,10 +9,10 @@ from waitress import serve
 
 import logging
 
-"""logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 logger.debug("DEBUG TEST: logging está activo")
-print("PRINT TEST: stdout está activo")"""
+print("PRINT TEST: stdout está activo")
 
 
 app = Flask(__name__)

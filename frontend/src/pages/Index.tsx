@@ -169,7 +169,19 @@ const Index = () => {
               </TabsContent>
 
               <TabsContent value="evidences" className="mt-6">
-                <EvidenceTable evidences={result.evidences || []} />
+                  <EvidenceTable
+                    evidences={
+                      result.evidences
+                        ? result.evidences.map((e: any) => ({
+                            domain: e.domain,
+                            owner: e.owner,
+                            detail: e.detail,
+                          }))
+                        : []
+                    }
+                  />
+
+
               </TabsContent>
 
               <TabsContent value="json" className="mt-6">
