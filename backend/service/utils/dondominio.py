@@ -10,11 +10,57 @@ from httpx import HTTPStatusError, TimeoutException
 import json
 import base64
 import re
-
+from opensearchpy import OpenSearch
+import os
 import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+# ---------- OpenSearch ----------------
+_OPENSEARCH_HOST = os.getenv("OPENSEARCH_HOST", "localhost")
+_OPENSEARCH_PORT = int(os.getenv("OPENSEARCH_PORT", "9200"))
+_PRIVACY_INDEX = "privacy_values"
+_PRIVACY_DOC_ID = "whois_privacy_values"
+
+_privacy_cache: Optional[List[str]] = None
+
+def load_privacy_values() -> List[str]:   # 🔵 CAMBIO
+    """
+    Carga desde OpenSearch el array de valores de privacidad.
+    Se cachea en memoria para no recalentar OS.
+    """
+    global _privacy_cache
+    if _privacy_cache is not None:
+        return _privacy_cache
+
+    client = OpenSearch(
+        hosts=[{"host": _OPENSEARCH_HOST, "port": _OPENSEARCH_PORT}],
+        http_compress=True,
+    )
+
+    try:
+        resp = client.get(index=_PRIVACY_INDEX, id=_PRIVACY_DOC_ID)
+        vals = resp.get("_source", {}).get("values", [])
+        _privacy_cache = [v.lower().strip() for v in vals]
+        logger.info(f"[privacy] cargados {len(_privacy_cache)} valores")
+    except Exception as e:
+        logger.error(f"[privacy] error cargando privacy_values: {e}")
+        _privacy_cache = []
+
+    return _privacy_cache
+
+
+def _is_privacy_value(val: str) -> bool:   # 🔵 CAMBIO
+    """
+    Sustituye al antiguo _is_privacy_value() hardcodeado.
+    Usa los valores del índice privacy_values.
+    """
+    v = (val or "").lower().strip()
+    if not v:
+        return False
+
+    patterns = load_privacy_values()
+    return any(p in v for p in patterns)
 
 # ---------- helpers ----------
 def _dump_short(obj: Any, n: int = 800) -> str:
@@ -411,21 +457,6 @@ def _kv_map(lines: List[str]) -> Dict[str, str]:
             v = m.group(2).strip()
             kv[k] = v
     return kv
-
-def _is_privacy_value(val: str) -> bool:
-    v = (val or "").lower()
-    return (
-        "redacted for privacy" in v
-        or "select request email form" in v
-        or "whois privacy" in v
-        or "privacy protect" in v
-        or "data protected" in v
-        or "contact privacy" in v
-        or "private registrant" in v
-        or "privacy corporation" in v
-        or "domain admin" in v
-        or "not disclosed" in v
-    )
 
 def _clean_text(text: str) -> str:
     """Normaliza saltos de línea, elimina códigos ANSI y etiquetas HTML"""
