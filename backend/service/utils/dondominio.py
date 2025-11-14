@@ -424,6 +424,7 @@ def _is_privacy_value(val: str) -> bool:
         or "private registrant" in v
         or "privacy corporation" in v
         or "domain admin" in v
+        or "not disclosed" in v
     )
 
 def _clean_text(text: str) -> str:
@@ -479,16 +480,7 @@ def _owner_from_com_record(record_text: str) -> Tuple[Optional[str], bool, str]:
 
     seen_privacy = False  # solo cuenta si es en Name/Organization
 
-    # 1) Registrant Name (máxima prioridad)
-    owner = find_key(r"registrant\s+name")
-    if owner:
-        if _is_privacy_value(owner):
-            logger.debug("[COM] Registrant Name es privacidad")
-            seen_privacy = True
-        else:
-            return (owner, False, "COM:RegistrantName")
-
-    # 2) Registrant Organization / Organisation
+    # 1) Registrant Organization / Organisation (máxima prioridad)
     owner = find_key(r"registrant\s+organ(?:i|isa)zation")
     if owner:
         if _is_privacy_value(owner):
@@ -496,6 +488,15 @@ def _owner_from_com_record(record_text: str) -> Tuple[Optional[str], bool, str]:
             seen_privacy = True
         else:
             return (owner, False, "COM:RegistrantOrganization")
+
+    # 2) Registrant Name
+    owner = find_key(r"registrant\s+name")
+    if owner:
+        if _is_privacy_value(owner):
+            logger.debug("[COM] Registrant Name es privacidad")
+            seen_privacy = True
+        else:
+            return (owner, False, "COM:RegistrantName")
 
     # 3) Organization / Org genérico (evitando usarlo si es privacy)
     owner = find_key(r"organ(?:i|isa)zation|^org$")

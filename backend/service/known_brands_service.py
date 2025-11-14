@@ -95,7 +95,7 @@ def upsert_brand(
     brand_id: str,
     canonical_domain: str,
     canonical_tld: str,
-    brand_keywords: List[str],
+    keywords: List[str],
     owner_terms: Optional[str] = "",
     known_domains: Optional[List[str]] = None,
 ):
@@ -112,7 +112,7 @@ def upsert_brand(
         "brand_id": brand_id,
         "canonical_domain": canonical_domain,
         "canonical_tld": canonical_tld,
-        "brand_keywords": " ".join(brand_keywords),
+        "keywords": keywords,
         "owner_terms": owner_terms or "",
         "known_domains": known_domains or [],
     }
@@ -149,6 +149,31 @@ def add_known_domain(brand_id: str, domain: str) -> None:
         }
     )
 
+
+def add_keyword(brand_id: str, keyword: str) -> None:
+    """
+    Añade un token al array keywords si no existe.
+    """
+    client = get_opensearch_client()
+
+    client.update(
+        index=INDEX_KNOWN_BRANDS,
+        id=brand_id,
+        body={
+            "script": {
+                "source": """
+                    if (ctx._source.keywords == null) {
+                        ctx._source.keywords = [];
+                    }
+                    if (!ctx._source.keywords.contains(params.keyword)) {
+                        ctx._source.keywords.add(params.keyword);
+                    }
+                """,
+                "lang": "painless",
+                "params": {"keyword": keyword}
+            }
+        }
+    )
 
 # ---------------------------------------------------------
 # Añadir owner_terms
@@ -208,19 +233,40 @@ def guess_brand_from_whois(owner_str: str, max_results: int = 3) -> List[Dict]:
     """
     Devuelve las marcas más probables en función del WHOIS owner.
     Pondera fuertemente brand_keywords.
+    Si owner_str tiene ≤ 2 tokens, ignora owner_terms para evitar ruido.
     """
     client = get_opensearch_client()
+    tokens = owner_str.strip().split()
+    
+    should_clauses = [
+        {
+            "match": {
+                "keywords": {
+                    "query": owner_str,
+                    "boost": 5,
+                    "fuzziness": "AUTO"
+                }
+            }
+        }
+    ]
+
+    if len(tokens) > 2:
+        should_clauses.append({
+            "match": {
+                "owner_terms": {
+                    "query": owner_str,
+                    "boost": 1,
+                    "fuzziness": "AUTO"
+                }
+            }
+        })
 
     body = {
         "size": max_results,
         "query": {
-            "multi_match": {
-                "query": owner_str,
-                "fields": [
-                    "brand_keywords^3",  # peso alto
-                    "owner_terms"        # peso normal
-                ],
-                "fuzziness": "AUTO"
+            "bool": {
+                "should": should_clauses,
+                "minimum_should_match": 1
             }
         }
     }
@@ -318,13 +364,13 @@ def ensure_brand_for_root_domain(
         owner_terms = " ".join(tokens)
 
         # Keywords más potentes: por defecto el brand_id/base
-        brand_keywords = [brand_id]
+        keywords = [brand_id]
 
         upsert_brand(
             brand_id=brand_id,
             canonical_domain=root_domain,
             canonical_tld=tld,
-            brand_keywords=brand_keywords,
+            keywords=keywords,
             owner_terms=owner_terms,
             known_domains=[root_domain],
         )

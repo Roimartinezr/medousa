@@ -117,17 +117,16 @@ def extract_company_from_domain(domain: str) -> Dict:
         score = best["_score"]
         confidence = min(1.0, score / 10.0)   # normalización arbitraria
     else:
-        # sin match en OpenSearch: usamos el token MÁS LARGO (suele ser el nombre real)
+        # sin match en OpenSearch: usamos el último token
         if filtered:
-            longest = sorted(filtered, key=len, reverse=True)[0]
-            brand_id = longest
+            brand_id = filtered[-1]
         else:
             brand_id = ext.domain or domain
         confidence = 0.0
 
     return {
         "company": brand_id,
-        "confidence": confidence * 100.0,
+        "confidence": confidence,
         "candidate_text": candidate_str,
     }
 
