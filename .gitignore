@@ -1,0 +1,35 @@
+# ─── FRONTEND ──────────────────────────────────────────────
+node_modules/
+dist/
+dist-ssr/
+*.local
+*.lockb
+
+# Vite / Bun / npm / yarn / pnpm logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ─── BACKEND ───────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+venv/
+.env
+
+# ─── SHARED ────────────────────────────────────────────────
+.DS_Store
+*.sw?
+*.suo
+*.njsproj
+*.sln
+*.ntvs*
+
+# ─── EDITOR ────────────────────────────────────────────────
+.vscode/
+!.vscode/extensions.json
+.idea/
