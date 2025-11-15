@@ -175,7 +175,7 @@ async def sanitize_mail(email):
     owner_terms = ""
 
     # 3.3 Primero: comprobar si el dominio entrante YA es conocido
-    brand_doc = find_brand_by_known_domain(incoming_domain)
+    brand_doc = find_brand_by_known_domain(incoming_domain) # xxxGestionar aquí sensibilidad dominio/subdominio
     if not brand_doc and dns_root_domain != incoming_domain:
         # también probamos contra el root DNS real (bancosantander-mail.es)
         brand_doc = find_brand_by_known_domain(dns_root_domain)
@@ -322,6 +322,10 @@ async def sanitize_mail(email):
     # ======================================================
     # 5. RELACIÓN ENTRE DOMINIOS (root lógico vs incoming)
     # ======================================================
+    subdomain_added = False
+    if ext.subdomain:
+        add_known_domain(brand_id, incoming_domain)
+        subdomain_added = True
 
     root_dom_norm = _norm_domain(root_domain)           # bancosantander.es
     incoming_dom_norm = _norm_domain(incoming_domain)   # emailing.bancosantander-mail.es
@@ -329,7 +333,8 @@ async def sanitize_mail(email):
     if incoming_dom_norm and incoming_dom_norm == root_dom_norm:
         relation = 1  # mismo dominio base
     elif incoming_dom_norm and _is_subdomain(incoming_dom_norm, root_dom_norm):
-        add_known_domain(brand_id, incoming_domain)
+        if not subdomain_added:
+            add_known_domain(brand_id, incoming_domain)
         relation = 2  # subdominio del dominio lógico/canónico
     else:
         relation = 0  # dominio ajeno (respecto al canonical)
@@ -344,11 +349,6 @@ async def sanitize_mail(email):
             "owner": root_owner,
             "detail": "Detected Root Domain",
         },
-        {
-            "domain": incoming_domain,
-            "owner": incoming_owner,
-            "detail": "Incoming Root Domain",
-        },
     ]
 
     if relation == 1:
@@ -357,14 +357,37 @@ async def sanitize_mail(email):
                 "domain": root_domain,
                 "owner": root_owner,
                 "detail": "Root Domain",
-            },
+            }
         ]
     elif relation == 2:
         evidences.append(
             {
                 "domain": incoming_domain,
-                "value": f"Subdominio de: {dns_root_domain}",
+                "owner": f"Subdominio de: {dns_root_domain}",
                 "detail": "Canonical Domain Subdomain",
+            }
+        )
+        evidences.append(
+            {
+                "domain": incoming_domain,
+                "owner": incoming_owner,
+                "detail": "Incoming Domain",
+            }
+        )
+    else:
+        if ext.subdomain:
+            evidences.append(
+                {
+                    "domain": f'{ext.domain}.{ext.suffix}',
+                    "owner": incoming_owner,
+                    "detail": "Incoming Superdomain",
+                }
+            )
+        evidences.append(
+            {
+                "domain": incoming_domain,
+                "owner": incoming_owner,
+                "detail": "Incoming Domain",
             }
         )
 
