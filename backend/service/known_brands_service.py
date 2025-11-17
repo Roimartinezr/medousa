@@ -38,7 +38,15 @@ def tokenize_owner_str(owner: str) -> List[str]:
 def ensure_known_brands_index() -> None:
     """
     Crea el índice 'known_brands' si no existe.
-    Index de un documento por brand.
+    Nuevo formato por documento:
+
+    {
+      "_id": "<brand_id>",
+      "country_code": "es",
+      "owner_terms": "banco bilbao vizcaya argentaria sa s a",
+      "keywords": ["bbva", "bilbao", "vizcaya", "argentaria"],
+      "known_domains": ["bbva.es", "bbva.com"]
+    }
     """
     client: OpenSearch = get_opensearch_client()
     if client.indices.exists(INDEX_KNOWN_BRANDS):
@@ -57,21 +65,17 @@ def ensure_known_brands_index() -> None:
         },
         "mappings": {
             "properties": {
-                # ID lógico de la brand en tu sistema
-                "brand_id": {"type": "keyword"},
+                # Código de país (ccTLD) cuando aplique, p.e. "es"
+                "country_code": {"type": "keyword"},
 
-                # Dominio principal canónico (bancosantander.com)
-                "canonical_domain": {"type": "keyword"},
-                "canonical_tld": {"type": "keyword"},
-
-                # Palabras clave muy distintivas (alto peso)
-                "brand_keywords": {
+                # Bolsa de palabras WHOIS (banco/bilbao/vizcaya/argentaria/sa...)
+                "owner_terms": {
                     "type": "text",
                     "analyzer": "owner_analyzer"
                 },
 
-                # Bolsa de palabras WHOIS (banco/santander/mexico/sa...)
-                "owner_terms": {
+                # Palabras clave de la marca (bbva, bilbao, vizcaya...)
+                "keywords": {
                     "type": "text",
                     "analyzer": "owner_analyzer"
                 },
@@ -93,27 +97,31 @@ def ensure_known_brands_index() -> None:
 
 def upsert_brand(
     brand_id: str,
-    canonical_domain: str,
-    canonical_tld: str,
+    country_code: str,
     keywords: List[str],
     owner_terms: Optional[str] = "",
     known_domains: Optional[List[str]] = None,
-):
+) -> None:
     """
-    Crea o actualiza una brand completa.
-    Ideal para inicializar tus marcas base
-    (bbva, abanca, santander...).
+    Crea o actualiza una brand completa con el NUEVO formato.
+    Ideal para inicializar tus marcas base (bbva, abanca, santander...).
+
+    _id = brand_id
+    _source = {
+      "country_code": "...",
+      "owner_terms": "...",
+      "keywords": [...],
+      "known_domains": [...]
+    }
     """
     client = get_opensearch_client()
 
-    doc_id = brand_id  # usamos brand_id como _id
+    doc_id = brand_id  # usamos brand_id como _id lógico
 
     payload = {
-        "brand_id": brand_id,
-        "canonical_domain": canonical_domain,
-        "canonical_tld": canonical_tld,
-        "keywords": keywords,
+        "country_code": country_code or "",
         "owner_terms": owner_terms or "",
+        "keywords": keywords or [],
         "known_domains": known_domains or [],
     }
 
@@ -175,6 +183,7 @@ def add_keyword(brand_id: str, keyword: str) -> None:
         }
     )
 
+
 # ---------------------------------------------------------
 # Añadir owner_terms
 # ---------------------------------------------------------
@@ -232,12 +241,15 @@ def add_owner_terms(brand_id: str, owner_str: str) -> None:
 def guess_brand_from_whois(owner_str: str, max_results: int = 3) -> List[Dict]:
     """
     Devuelve las marcas más probables en función del WHOIS owner.
-    Pondera fuertemente brand_keywords.
-    Si owner_str tiene ≤ 2 tokens, ignora owner_terms para evitar ruido.
+    Pondera fuertemente 'keywords' y, si hay suficiente texto, también 'owner_terms'.
     """
     client = get_opensearch_client()
-    tokens = owner_str.strip().split()
-    
+    owner_str = (owner_str or "").strip()
+    if not owner_str:
+        return []
+
+    tokens = owner_str.split()
+
     should_clauses = [
         {
             "match": {
@@ -306,10 +318,11 @@ def find_brand_by_known_domain(domain: str) -> Optional[Dict]:
     hits = resp.get("hits", {}).get("hits", [])
     return hits[0] if hits else None
 
-def find_canonical_domain_by_keywords(domain: str) -> Optional[str]:
+
+def find_brand_by_keywords(domain: str) -> Optional[Dict]:
     """
     Busca una brand cuyo campo 'keywords' tenga similitud con el dominio.
-    Devuelve el canonical_domain si hay coincidencias.
+    Devuelve el documento completo si hay coincidencias.
     """
     client = get_opensearch_client()
     resp = client.search(
@@ -343,9 +356,8 @@ def ensure_brand_for_root_domain(
 ) -> str:
     """
     Garantiza que exista una brand para root_domain.
-    - Si la brand NO existe → la crea (con ese root_domain como canónico).
-    - Si la brand YA existe → NO toca canonical_domain/canonical_tld,
-      solo enriquece: known_domains + owner_terms.
+    - Si la brand NO existe → la crea (con root_domain en known_domains).
+    - Si la brand YA existe → solo enriquece: known_domains + owner_terms.
     """
     client = get_opensearch_client()
     ext = tldextract.extract(root_domain)
@@ -355,25 +367,29 @@ def ensure_brand_for_root_domain(
 
     # ¿Ya existe la brand?
     try:
-        doc = client.get(index=INDEX_KNOWN_BRANDS, id=brand_id)
-        # ➜ Brand existente: solo nutrimos, no pisamos el canónico
+        client.get(index=INDEX_KNOWN_BRANDS, id=brand_id)
+        # ➜ Brand existente: solo nutrimos, no tocamos country_code
         add_known_domain(brand_id, root_domain)
         add_owner_terms(brand_id, owner_str)
         return brand_id
 
     except NotFoundError:
-        # ➜ Brand nueva: creamos canónico desde cero
-        tld = ext.suffix or ""
+        # ➜ Brand nueva: creamos desde cero
+        suffix = ext.suffix or ""
+        country_code = suffix.lower()
+        # si no es un ccTLD de 2 letras, lo dejamos vacío
+        if len(country_code) != 2:
+            country_code = ""
+
         tokens = tokenize_owner_str(owner_str)
         owner_terms = " ".join(tokens)
 
-        # Keywords más potentes: por defecto el brand_id/base
+        # Keywords por defecto: el brand_id/base
         keywords = [brand_id]
 
         upsert_brand(
             brand_id=brand_id,
-            canonical_domain=root_domain,
-            canonical_tld=tld,
+            country_code=country_code,
             keywords=keywords,
             owner_terms=owner_terms,
             known_domains=[root_domain],

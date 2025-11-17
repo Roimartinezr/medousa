@@ -196,9 +196,8 @@ async def sanitize_mail(email):
     new_brand = False
     if brand_doc:
         src = brand_doc["_source"]
-        brand_id = src.get("brand_id")
-        canonical_domain = src.get("canonical_domain") or root_domain
-        root_domain = canonical_domain  # root lógico = canonical
+        brand_id = brand_doc["_id"]
+        root_domain = f'{brand_id}.{src.get("country_code")}'
         company_detected = brand_id or company_detected
 
         brand_known_domains = set(src.get("known_domains", []))
@@ -207,21 +206,17 @@ async def sanitize_mail(email):
         brand_profile = " ".join(
             [
                 owner_terms,
-                " ".join(keywords),
-                (brand_id or ""),
-                canonical_domain.split(".")[0],
+                " ".join(keywords)
             ]
         )
 
     else:
-        # 3.4 Mirar si ya tenemos brand por canonical_domain (root lógico)
-        brand_doc = find_canonical_domain_by_keywords(ext.domain)
-        logger.debug(f'=================== {brand_doc}')
+        # 3.4 Mirar si ya tenemos brand por keywords (root lógico)
+        brand_doc = find_brand_by_keywords(ext.domain)
         if brand_doc:
             src = brand_doc["_source"]
-            brand_id = src.get("brand_id")
-            canonical_domain = src.get("canonical_domain") or root_domain
-            root_domain = canonical_domain
+            brand_id = brand_doc["_id"]
+            root_domain = f'{brand_id}.{src.get("country_code")}'
             company_detected = brand_id or company_detected
 
             brand_known_domains = set(src.get("known_domains", []))
@@ -230,9 +225,7 @@ async def sanitize_mail(email):
             brand_profile = " ".join(
                 [
                     owner_terms,
-                    " ".join(keywords),
-                    (brand_id or ""),
-                    canonical_domain.split(".")[0],
+                    " ".join(keywords)
                 ]
             )
         else:
@@ -256,13 +249,7 @@ async def sanitize_mail(email):
                 company_detected = brand_id or company_detected
                 brand_known_domains = {root_domain}
                 owner_terms = root_owner  # <-- usamos el WHOIS como owner_terms inicial
-                brand_profile = " ".join(
-                    [
-                        root_owner,
-                        (brand_id or ""),
-                        root_domain.split(".")[0],
-                    ]
-                )
+                brand_profile = " ".join(dict.fromkeys([root_owner, brand_id or ""]))
                 try:
                     add_known_domain(brand_id, root_domain)
                 except Exception:
