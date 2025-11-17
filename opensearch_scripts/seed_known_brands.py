@@ -6,7 +6,10 @@ OPENSEARCH_PORT = 9200
 INDEX_KNOWN_BRANDS = "known_brands"
 
 # ============================================================
-# Datos reales de bancos españoles (extraídos de tus imágenes)
+# Datos reales de bancos / marcas
+# Ahora usamos canonical_domain SOLO para derivar country_code.
+# El documento que se indexa ya NO incluye canonical_domain
+# ni brand_id en _source.
 # ============================================================
 
 BANK_BRANDS = [
@@ -190,8 +193,9 @@ GENERAL_BRANDS = [
     "hermes", "dpd", "posteitaliane", "la poste", "usps"
 ]
 
+
 def ensure_known_brands_index(client):
-    """Crea el índice con mapping optimizado."""
+    """Crea el índice con el NUEVO mapping."""
     if client.indices.exists(index=INDEX_KNOWN_BRANDS):
         print("[known_brands] Ya existe")
         return
@@ -208,10 +212,13 @@ def ensure_known_brands_index(client):
         },
         "mappings": {
             "properties": {
-                "brand_id": {"type": "keyword"},
-                "canonical_domain": {"type": "keyword"},
+                # Nuevo campo
+                "country_code": {"type": "keyword"},
+                # Bolsa de términos de WHOIS / owner
                 "owner_terms": {"type": "text", "analyzer": "brand_analyzer"},
+                # Palabras clave asociadas a la marca
                 "keywords": {"type": "text", "analyzer": "brand_analyzer"},
+                # Dominios validados
                 "known_domains": {"type": "keyword"}
             }
         }
@@ -221,14 +228,41 @@ def ensure_known_brands_index(client):
     print("[known_brands] Índice creado")
 
 
+def _derive_country_code_from_domain(canonical_domain: str) -> str:
+    """
+    A partir de 'abanca.es' -> 'es'.
+    Si el sufijo no es ccTLD de 2 letras (.com, .net, ...) -> ''.
+    """
+    if not canonical_domain:
+        return ""
+    parts = canonical_domain.lower().split(".")
+    if len(parts) < 2:
+        return ""
+    suffix = parts[-1]
+    if len(suffix) == 2:
+        return suffix
+    return ""
+
+
 def insert_brand(client, brand):
-    """Inserta o actualiza una marca."""
+    """Inserta o actualiza una marca con el NUEVO formato."""
+
+    canonical = brand.get("canonical_domain", "")
+    derived_cc = _derive_country_code_from_domain(canonical)
+
+    body = {
+        "country_code": brand.get("country_code", derived_cc),
+        "owner_terms": brand["owner_terms"],
+        "keywords": brand["keywords"],
+        "known_domains": brand["known_domains"]
+    }
+
     client.index(
         index=INDEX_KNOWN_BRANDS,
         id=brand["brand_id"],
-        body=brand
+        body=body
     )
-    print(f"[+] Insertado {brand['brand_id']}")
+    print(f"[+] Insertado {brand['brand_id']} -> {body}")
 
 
 def main():
@@ -240,15 +274,15 @@ def main():
 
     ensure_known_brands_index(client)
 
-    # Insertar bancos
+    # Insertar bancos / marcas “grandes”
     for b in BANK_BRANDS:
         insert_brand(client, b)
 
-    # Insertar marcas generales (sin owner_terms)
+    # Insertar marcas generales (sin owner_terms detallado, country_code = "")
     for name in GENERAL_BRANDS:
         doc = {
             "brand_id": name,
-            "canonical_domain": name + ".com",
+            "canonical_domain": name + ".com",  # solo para derivar cc (será "")
             "owner_terms": name,
             "keywords": [name],
             "known_domains": [name + ".com"]
