@@ -3,7 +3,7 @@ import re
 from typing import Dict
 from email_validator import validate_email, caching_resolver, EmailNotValidError
 import tldextract
-from .dondominio import DonDominioAsync, get_owner_via_whois
+from ...scrap.dondominio import DonDominioAsync, get_owner_via_whois
 from ..known_brands_service import guess_brand_from_whois
 from ..omit_words_service import get_all_omit_words
 import logging
@@ -113,7 +113,7 @@ def extract_company_from_domain(domain: str) -> Dict:
 
     if candidates:
         best = candidates[0]
-        brand_id = best["_source"]["brand_id"]
+        brand_id = best["_id"]
         score = best["_score"]
         confidence = min(1.0, score / 10.0)   # normalización arbitraria
     else:
