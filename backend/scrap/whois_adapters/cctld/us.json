@@ -1,0 +1,25 @@
+{
+  "tld": "us",
+  "registry": "Registry Services, LLC",
+  "fields": {
+    "domain_name": "domain_name",
+    "registrant_organization": "tech_organization",
+    "registrant_name": "tech_name",
+    "registrar": "registrar",
+    "emails": "tech_email",
+    "creation_date": {
+      "source": "creation_date",
+      "normalize": "first" 
+    },
+    "expiration_date": {
+      "source": "expiration_date",
+      "normalize": "last" 
+    },
+    "updated_date": {
+      "source": "updated_date",
+      "normalize": "last" 
+    },
+    "name_servers": "name_servers",
+    "status": "status"
+  }
+}

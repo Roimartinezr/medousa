@@ -4,7 +4,7 @@
   "fields": {
     "domain_name": "domain_name",
     "registrant_organization": "tech_name",
-    "registrant_name": null,
+    "registrant_name": "registrant_name",
     "registrar": "url",
     "emails": null,
     "creation_date": "creation_date",
