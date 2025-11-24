@@ -1,0 +1,16 @@
+{
+  "tld": "co",
+  "registry": "MinTIC ",
+  "fields": {
+    "domain_name": "",
+    "registrant": "",
+    "registrant_name": "", 
+    "registrar": "",
+    "emails": "",
+    "creation_date": "",
+    "expiration_date": "",
+    "updated_date": "",
+    "name_servers": "",
+    "status": ""
+  }
+}

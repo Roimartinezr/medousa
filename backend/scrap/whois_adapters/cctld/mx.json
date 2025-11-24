@@ -1,0 +1,16 @@
+{
+  "tld": "mx",
+  "registry": "NIC Mexico",
+  "fields": {
+    "domain_name": "domain_name",
+    "registrant_organization": "tech_name",
+    "registrant_name": null,
+    "registrar": "url",
+    "emails": null,
+    "creation_date": "creation_date",
+    "expiration_date": "expiration_date",
+    "updated_date": "updated_date",
+    "name_servers": "name_servers",
+    "status": null
+  }
+}

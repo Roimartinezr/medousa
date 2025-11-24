@@ -90,18 +90,46 @@ async def sanitize_mail(email):
                 "evidences": [],
             }
     elif v_mail != email:
-        # Anomalías ASCII
-        return {
-            "request_id": str(uuid.uuid4()),
-            "email": email,
-            "veredict": "phishing",
-            "veredict_detail": "Ascii anomaly detected",
-            "company_impersonated": None,
-            "company_detected": None,
-            "confidence": 0.0,
-            "labels": ["invalid-format", "ascii-anomaly"],
-            "evidences": [],
-        }
+        try:
+            # dominio original tal y como llega en la request (punycode)
+            _, orig_domain = email.rsplit("@", 1)
+            # dominio normalizado (Unicode) devuelto por validate_mail
+            _, norm_domain = v_mail.rsplit("@", 1)
+
+            orig_tld = orig_domain.rsplit(".", 1)[-1].lower()
+        except ValueError:
+            # Por si acaso, si algo raro pasa, mantenemos el comportamiento antiguo
+            return {
+                "request_id": str(uuid.uuid4()),
+                "email": email,
+                "veredict": "phishing",
+                "veredict_detail": "Ascii anomaly detected",
+                "company_impersonated": None,
+                "company_detected": None,
+                "confidence": 0.0,
+                "labels": ["invalid-format", "ascii-anomaly"],
+                "evidences": [],
+            }
+
+        # Si el TLD ORIGINAL es IDN (punycode), NO lo tratamos como anomalía ASCII
+        if orig_tld.startswith("xn--"):
+            # aceptamos la versión normalizada y seguimos el pipeline
+            aux = email
+            email = v_mail
+            v_mail = aux
+        else:
+            # comportamiento original: anomalía ASCII
+            return {
+                "request_id": str(uuid.uuid4()),
+                "email": email,
+                "veredict": "phishing",
+                "veredict_detail": "Ascii anomaly detected",
+                "company_impersonated": None,
+                "company_detected": None,
+                "confidence": 0.0,
+                "labels": ["invalid-format", "ascii-anomaly"],
+                "evidences": [],
+            }
 
     # 2. Extraer dominio entrante (FQDN)
     incoming_domain = extract_domain_from_email(v_mail)
@@ -295,7 +323,7 @@ async def sanitize_mail(email):
             if similarity >= 0.7:  # umbral ajustable
                 owners_match = True
                 try:
-                    if ext.subdomain:
+                    if ext.subdomain and brand_id:
                         dns_root_subdomain = f'{ext.subdomain}.{dns_root_domain}'
                         add_known_domain(brand_id, dns_root_subdomain)
                     add_known_domain(brand_id, dns_root_domain)
@@ -310,7 +338,7 @@ async def sanitize_mail(email):
     # 5. RELACIÓN ENTRE DOMINIOS (root lógico vs incoming)
     # ======================================================
     subdomain_added = False
-    if ext.subdomain:
+    if ext.subdomain and brand_id:
         add_known_domain(brand_id, incoming_domain)
         subdomain_added = True
 
@@ -320,7 +348,7 @@ async def sanitize_mail(email):
     if incoming_dom_norm and incoming_dom_norm == root_dom_norm:
         relation = 1  # mismo dominio base
     elif incoming_dom_norm and _is_subdomain(incoming_dom_norm, root_dom_norm):
-        if not subdomain_added:
+        if not subdomain_added and brand_id:
             add_known_domain(brand_id, incoming_domain)
         relation = 2  # subdominio del dominio lógico/canónico
     else:

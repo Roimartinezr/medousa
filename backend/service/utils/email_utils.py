@@ -3,7 +3,9 @@ import re
 from typing import Dict
 from email_validator import validate_email, caching_resolver, EmailNotValidError
 import tldextract
-from ...scrap.dondominio import DonDominioAsync, get_owner_via_whois
+import whois  # <-- NUEVO: librería whois para .com y gTLD
+from ...scrap.dondominio import DonDominioAsync, get_owner_via_dondominio
+from ...scrap.whois_web import get_registrant_country_code, get_registrant_organization
 from ..known_brands_service import guess_brand_from_whois
 from ..omit_words_service import get_all_omit_words
 import logging
@@ -135,12 +137,98 @@ def extract_company_from_domain(domain: str) -> Dict:
 # ========================= DOMAIN LEGITMACY ===========================
 
 async def get_domain_owner(domain: str) -> str:
-    logger.debug(f"Fetching owner for domain: {domain}")
     """
-    Devuelve el titular del dominio (.es o .com).
-    Si el dominio .com tiene privacidad (REDACTED), intenta obtener el .es equivalente.
-    """
-    async with DonDominioAsync(debug=False) as api:
-        owner = await get_owner_via_whois(api, domain)
-        return owner or "No encontrado"
+    Devuelve el titular del dominio.
 
+    - Para dominios .es se usa DonDominio.
+    - Para .com y el resto de gTLD se usa la librería python-whois.
+    - Si un .com viene con privacidad (REDACTED / privacy), se intenta
+      un fallback a la versión .es del mismo segundo nivel
+      (ej: example.com -> example.es) usando DonDominio.
+
+    Nota: el fallback .com -> .es solo se aplica a .com, no al resto de gTLD.
+    """
+    domain = (domain or "").strip().lower()
+    logger.debug(f"Fetching owner for domain: {domain}")
+
+    if not domain:
+        return "No encontrado"
+
+    ext = tldextract.extract(domain)
+    suffix = (ext.suffix or "").lower()
+
+    # Dominio raíz normalizado (por si te pasan subdominios)
+    if ext.domain and ext.suffix:
+        root_domain = f"{ext.domain}.{ext.suffix}".lower()
+    else:
+        root_domain = domain
+
+
+    # A PARTIR DE AQUI GESTIONAR DIVERSIFICACIÓN SEGÚN EL TLD (no solo .es y gTLD)
+
+
+    # 1) .es -> DonDominio
+    if suffix == "es":
+        try:
+            async with DonDominioAsync(debug=False) as api:
+                owner = await get_owner_via_dondominio(api, root_domain)
+                return owner or "No encontrado"
+        except Exception as e:
+            logger.exception(f"Error obteniendo owner .es con DonDominio para {root_domain}: {e}")
+            return "No encontrado"
+
+    # 2) gTLD (.com, .net, .org, .info, etc.) -> python-whois
+    try:
+        w = whois.whois(root_domain)
+    except Exception as e:
+        logger.exception(f"Error ejecutando python-whois para {root_domain}: {e}")
+        return "No encontrado"
+
+    owner = None
+
+    # python-whois es objeto dict-like; probamos varias claves típicas
+    candidate_keys = ("org", "organization", "registrant_org", "registrant", "owner")
+    for key in candidate_keys:
+        value = None
+        # getattr si tiene atributo, si no probamos como dict
+        if hasattr(w, key):
+            value = getattr(w, key)
+        elif isinstance(w, dict):
+            value = w.get(key)
+
+        if value:
+            owner = value
+            break
+
+    # A veces vienen listas
+    if isinstance(owner, (list, tuple)):
+        owner = " ".join(str(x) for x in owner if x)
+
+    owner_str = owner.strip() if isinstance(owner, str) else None
+
+    # 2.b) Fallback SOLO para .com -> probar equivalente .es si está privatizado
+    if suffix == "com":
+        privatized = False
+        if not owner_str:
+            privatized = True
+        else:
+            low = owner_str.lower()
+            if "redacted" in low or "privacy" in low or "whoisguard" in low:
+                privatized = True
+
+
+
+        # A PARTIR DE AQUI GESTIONAR FALL BACK DE GTLD
+
+        if privatized and ext.domain:
+            fallback_es = f"{ext.domain}.es"
+            logger.debug(f"Owner .com privatizado para {root_domain}, intentando fallback .es: {fallback_es}")
+            try:
+                async with DonDominioAsync(debug=False) as api:
+                    es_owner = await get_owner_via_dondominio(api, fallback_es)
+                    if es_owner:
+                        return es_owner
+            except Exception as e:
+                logger.exception(f"Error en fallback .com -> .es ({fallback_es}): {e}")
+
+    return owner_str or "No encontrado"

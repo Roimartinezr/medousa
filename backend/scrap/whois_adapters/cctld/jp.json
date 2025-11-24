@@ -1,0 +1,16 @@
+{
+  "tld": "jp",
+  "registry": "JPRS",
+  "fields": {
+    "domain_name": "domain_name",
+    "registrant_organization": "registrant_org",
+    "registrant_name": null,
+    "registrar": null,
+    "emails": "administrative_contact_email",
+    "creation_date": "creation_date",
+    "expiration_date": null,
+    "updated_date": "updated_date",
+    "name_servers": "name_servers",
+    "status": "status"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "tld": "ar",
+  "registry": "NIC Argentina",
+  "fields": {
+    "domain_name": "domain_name",
+    "registrant": "name",
+    "registrant_name": null,
+    "registrar": "registrar",
+    "emails": "emails",
+    "creation_date": {
+      "source": "creation_date",
+      "normalize": "first" 
+    },
+    "expiration_date": "expiration_date",
+    "updated_date": {
+      "source": "updated_date",
+      "normalize": "last" 
+    },
+    "name_servers": "name_servers",
+    "status": "status"
+  }
+}

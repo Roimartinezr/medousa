@@ -1,0 +1,22 @@
+{
+  "tld": "br",
+  "registry": "NIC.br",
+  "fields": {
+    "domain_name": "domain_name",
+    "registrant": "registrant_name",
+    "registrant_name": "person", 
+    "registrar": null,
+    "emails": "email",
+    "creation_date": {
+      "source": "creation_date",
+      "normalize": "first" 
+    },
+    "expiration_date": "expiration_date",
+    "updated_date": {
+      "source": "updated_date",
+      "normalize": "last" 
+    },
+    "name_servers": "name_servers",
+    "status": "status"
+  }
+}
