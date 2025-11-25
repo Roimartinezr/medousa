@@ -1,15 +1,15 @@
-# dondominio_es_only.py
-# Cliente asíncrono para DonDominio, reducido SOLO a WHOIS .es
-# Uso previsto: fallback externo que llama exclusivamente a get_owner_via_dondominio()
-# para extraer el TITULAR (Nombre) de dominios .es
+# app/backend/whois/scrap/dondominio.py
+# Cliente asíncrono para DonDominio, ampliado a WHOIS .es y .ad
+# Convierte la respuesta WHOIS completa en JSON key-values (arrays para campos repetidos, disclaimer incluido)
 
 import asyncio
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 import httpx
 from httpx import HTTPStatusError, TimeoutException
 import base64
 import re
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -20,86 +20,64 @@ def _dump_short(obj: Any, n: int = 800) -> str:
     s = str(obj)
     return (s[:n] + "…") if len(s) > n else s
 
-
-def _norm(text: str) -> str:
+def _norm(text: Optional[str]) -> str:
     if text is None:
         return ""
     return text.replace("\r", "")
-
 
 def _clean_text(text: str) -> str:
     """Normaliza saltos de línea, elimina códigos ANSI y etiquetas HTML"""
     if not text:
         return ""
-    # 1. Eliminar secuencias ANSI (colores de terminal)
     text = re.sub(r"\x1B\[[0-?]*[ -/]*[@-~]", "", text)
-    # 2. Eliminar etiquetas HTML (href, <a>, etc.)
     text = re.sub(r"<[^>]+>", "", text)
-    # 3. Reemplazar entidades HTML (opcional)
     text = text.replace("&nbsp;", " ")
-    # 4. Normalizar saltos de línea
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     return text
 
 
-def _match_domain_line_es(text: str) -> Optional[str]:
-    m = re.search(r"(?im)^\s*Dominio:\s*([A-Za-z0-9\.\-]+)\s*$", text)
-    return m.group(1).strip() if m else None
-
-
-def _owner_from_es_block(text: str):
+# ---------- WHOIS parsing genérico ----------
+def whois_to_json(whois_text: str) -> Dict[str, Any]:
     """
-    WHOIS .ES (ESNIC)
-    Buscamos sección 'Titular' y campo 'Nombre:'.
-    Devuelve (owner, source).
+    Convierte un bloque WHOIS en JSON con key-values.
+    - Cada línea 'Key: Value' se convierte en {key: value}
+    - Campos repetidos (ej. Name Server) se convierten en listas
+    - Líneas sin valor explícito se guardan como None
+    - Bloques legales o disclaimers se guardan en 'disclaimer'
     """
-    t = _norm(text)
+    result: Dict[str, Any] = {}
+    disclaimer_lines: List[str] = []
 
-    # Bloque:
-    # Titular
-    # Nombre: LO QUE SEA
-    # [...]
-    m_block = re.search(r"(?ism)^\s*Titular\s*(?:\n+)(.*?)(?:\n{2,}|\Z)", t)
-    if m_block:
-        bloque = m_block.group(1)
-        m_nom = re.search(r"(?im)^\s*Nombre\s*:\s*(.+?)\s*$", bloque)
-        if m_nom:
-            owner = m_nom.group(1).strip()
-            return owner, "ES:TITULAR->Nombre"
+    for line in whois_text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
 
-        # fallback: primera línea "limpia" del bloque
-        for ln in bloque.splitlines():
-            s = ln.strip()
-            if not s or ":" in s:
-                continue
-            return s, "ES:TITULAR->FirstLine"
+        # Detecta pares clave: valor
+        m = re.match(r"^([^:]+):\s*(.*)$", line)
+        if m:
+            key = m.group(1).strip()
+            val = m.group(2).strip() or None
 
-    # Variante compacta:
-    # Titular: LO QUE SEA
-    m_one = re.search(r"(?im)^\s*Titular\s*:\s*(.+?)\s*$", t)
-    if m_one:
-        return m_one.group(1).strip(), "ES:TitularLine"
+            # Normaliza clave (ej. Name Server → name_server)
+            key_norm = key.lower().replace(" ", "_")
 
-    return None, "ES:NoMatch"
+            # Si ya existe, convierte en lista
+            if key_norm in result:
+                if isinstance(result[key_norm], list):
+                    result[key_norm].append(val)
+                else:
+                    result[key_norm] = [result[key_norm], val]
+            else:
+                result[key_norm] = val
+        else:
+            # Si no es key-value, lo tratamos como parte del disclaimer
+            disclaimer_lines.append(line)
 
-
-def extract_owner_es(whois_text: str) -> Dict[str, object]:
-    """
-    Extrae el TITULAR para TLD .es.
-    Retorna dict con: owner, record_domain, source
-    """
-    text = _clean_text(_norm(whois_text))
-    owner, src = _owner_from_es_block(text)
-    record_domain = _match_domain_line_es(text)
-
-    return {
-        "owner": owner,
-        "record_domain": record_domain,
-        "source": src,
-    }
+    return result
 
 
-# ---------- cliente DonDominio (solo WHOIS) ----------
+# ---------- cliente DonDominio ----------
 class DonDominioAsync:
     BASE = "https://www.dondominio.com"
 
@@ -120,7 +98,6 @@ class DonDominioAsync:
         self.lang_path = lang_path
         self.debug = debug
 
-        # Headers por defecto para XHR (los de HTML se ponen en ensure_session)
         self.headers = {
             "Accept": "*/*",
             "Accept-Language": "es-ES,es;q=0.9",
@@ -156,7 +133,6 @@ class DonDominioAsync:
         """
         assert self._c is not None
 
-        # 1) HTML como navegador real
         hdr_html = {
             "Accept": (
                 "text/html,application/xhtml+xml,application/xml;q=0.9,"
@@ -171,7 +147,6 @@ class DonDominioAsync:
         if "PHPSESSID" not in self._c.cookies:
             raise RuntimeError("No se recibió PHPSESSID tras /whois/; revisa Referer/UA/idioma.")
 
-        # 2) Warm-up JSON
         hdr_json = {
             "Accept": "*/*",
             "Origin": self.BASE,
@@ -180,7 +155,10 @@ class DonDominioAsync:
         r2 = await self._c.get("/v3/user/status/", headers=hdr_json)
         r2.raise_for_status()
         if self.debug:
-            print("USER/STATUS:", _dump_short(r2.json()))
+            try:
+                print("USER/STATUS:", _dump_short(r2.json()))
+            except Exception:
+                pass
 
     # ---------- HTTP con reintentos ----------
     async def _post_form(self, path: str, data: Dict[str, Any], *, retries: int = 2) -> Dict[str, Any]:
@@ -200,11 +178,11 @@ class DonDominioAsync:
             raise last_exc
         return {}
 
-    # ---------- WHOIS .es ----------
+    # ---------- WHOIS (texto crudo) ----------
     async def domain_whois(self, domain: str) -> str:
         """
         Devuelve el texto WHOIS tal cual lo ves en la web.
-        En esta sesión, el endpoint exige 'recaptcha_response' con el PHPSESSID en base64.
+        Mantiene el flujo de recaptcha_response con PHPSESSID en base64.
         """
         assert self._c is not None
 
@@ -212,23 +190,20 @@ class DonDominioAsync:
         recaptcha_token = base64.b64encode(phpsessid.encode()).decode() if phpsessid else ""
 
         variants = [
-            {"recaptcha_response": recaptcha_token, "domain": domain},  # igual que navegador
-            {"domain": domain},                                         # fallback simple
-            {"recaptcha_response": "", "domain": domain},               # otro fallback
+            {"recaptcha_response": recaptcha_token, "domain": domain},
+            {"domain": domain},
+            {"recaptcha_response": "", "domain": domain},
         ]
 
         last: Dict[str, Any] = {}
         for v in variants:
             try:
                 if self.debug:
-                    print("[domain_whois] variante:", v.keys())
+                    print("[domain_whois] variante:", list(v.keys()))
                 resp = await self._post_form("/v3/search/whois/domain/", v)
                 last = resp
                 data = resp.get("data") or {}
-                if isinstance(data, dict):
-                    who = data.get("whois")
-                else:
-                    who = None
+                who = data.get("whois") if isinstance(data, dict) else None
                 if who:
                     return str(who).strip()
                 if (resp.get("system") or {}).get("valid"):
@@ -239,41 +214,53 @@ class DonDominioAsync:
         return ""
 
 
-# ---------- API pública para el fallback externo ----------
-async def get_owner_via_dondominio(api: DonDominioAsync, domain: str) -> Optional[str]:
+# ---------- API pública: WHOIS completo en JSON ----------
+async def get_whois_json_via_dondominio(api: DonDominioAsync, domain: str) -> Dict[str, Any]:
     """
-    WHOIS del dominio .es.
-    Uso previsto: el fallback externo ya decide cuándo llamar aquí (solo TLD .es).
-    Devuelve solo el titular (Nombre) o None.
+    WHOIS del dominio (.es, .ad, etc).
+    Devuelve JSON completo con todos los key-values posibles (jsoneado).
+    Incluye:
+      - domain: dominio consultado
+      - tld: TLD derivado
+      - parsed: dict de key-values (arrays para claves repetidas)
+      - raw_text: WHOIS crudo (para inspección y trazabilidad)
     """
     domain = domain.strip().lower()
-    if not domain.endswith(".es"):
-        logger.warning("[get_owner_via_dondominio] dominio sin .es: %s", domain)
+    tld = domain.split(".")[-1] if "." in domain else None
 
     whois_text = await api.domain_whois(domain)
     if not whois_text:
-        logger.debug("[get_owner_via_dondominio] WHOIS vacío para %s", domain)
-        return None
+        logger.debug("[get_whois_json_via_dondominio] WHOIS vacío para %s", domain)
+        return {
+            "domain": domain,
+            "tld": tld,
+            "parsed": {},
+            "raw_text": ""
+        }
 
-    parsed = extract_owner_es(whois_text)
-    owner = parsed.get("owner")
+    # Jsonea todo el WHOIS (key-values y arrays para claves repetidas)
+    parsed = whois_to_json(_clean_text(_norm(whois_text)))
 
-    if owner:
-        owner_str = str(owner).strip()
-        logger.debug("[get_owner_via_dondominio] %s -> %r (%s)", domain, owner_str, parsed.get("source"))
-        return owner_str
+    result = {
+        "domain": domain,
+        "tld": tld,
+        "parsed": parsed,
+        "raw_text": whois_text
+    }
 
-    logger.debug("[get_owner_via_dondominio] sin owner para %s (source=%s)", domain, parsed.get("source"))
-    return None
-
-
-# ---------- prueba rápida opcional ----------
-async def main():
-    async with DonDominioAsync(debug=True) as api:
-        for dom in ["bancosantander.es", "bbva.es"]:
-            owner = await get_owner_via_dondominio(api, dom)
-            print(dom, "=>", owner)
+    logger.debug(
+        "[get_whois_json_via_dondominio] %s -> keys(parsed)=%s",
+        domain, list(parsed.keys())
+    )
+    return result
 
 
-if __name__ == "__main__":
-    asyncio.run(main())
+async def main(domain):
+    async with DonDominioAsync() as api:
+        info = await get_whois_json_via_dondominio(api=api, domain=domain)
+        p = info['parsed']
+        #print(json.dumps(p, indent=2, ensure_ascii=False))
+        return p
+
+"""if __name__ == "__main__":
+    asyncio.run(main())"""

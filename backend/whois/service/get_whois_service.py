@@ -24,23 +24,62 @@ def get_client() -> OpenSearch:
 import tldextract
 import whois
 import json
+import importlib
 import os
+import logging
+import asyncio
 from datetime import datetime
 from jsonschema import validate, ValidationError
 from ...opensearch_client import get_opensearch_client
 from ..scrap.whois_socket import whois_query
 
-def normalize_value(value):
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+DATE_KEYS = {"creation_date", "expiration_date", "updated_date"}
+
+def _normalize_date(value, mode="first"):
+    """
+    Convierte listas de fechas o datetime a string ISO.
+    mode puede ser 'first' o 'last'.
+    """
+    if value is None:
+        return None
+
+    # Si es lista de fechas
+    if isinstance(value, (list, tuple)):
+        if not value:
+            return None
+        if mode == "first":
+            value = value[0]
+        elif mode == "last":
+            value = value[-1]
+
+    # Si es datetime → string ISO
+    if isinstance(value, datetime):
+        return value.isoformat()
+
+    # Si es string → return tal cual
+    if isinstance(value, str):
+        return value.strip() or None
+
+    return str(value)
+
+def _normalize_value(value, mode="first"):
+    if value is None:
+        return None
+
     # cadenas vacías → None
     if isinstance(value, str) and value.strip() == "":
         return None
+    
     # datetime → string ISO
     if isinstance(value, datetime):
         return value.isoformat()
     return value
 
 
-def get_whois(domain):
+async def get_whois(domain):
     # estract tld from domain
     ext = tldextract.extract(domain)
     tld = ext.suffix.split('.')[-1]
@@ -76,23 +115,53 @@ def get_whois(domain):
     elif scraping_site.startswith("whois.nic"):
         w = whois_query(domain=domain, server=scraping_site)
     else: 
-        # aqui scrap por dondominio, whois-web, etc. (tengo que jsonear la respuesta de las paginas)
-        w = None
+        # scrap dinámico desde scrap/<scraping_site>.py
+        try:
+            mod_name = f"backend.whois.scrap.{scraping_site}"
+            scrap_module = importlib.import_module(mod_name)
+            w = await scrap_module.main(domain)
+        except Exception as e:
+            logger.warning(f"[scrap fallback] error al cargar módulo '{scraping_site}': {e}")
+            w = None
+
 
     #w = json.loads(w)
 
     # parse response
     fields = {}
     for target_key, source_key in fields_map.items():
+         # Caso especial: (fechas first/last)
+        if isinstance(source_key, dict):
+            src = source_key.get("source")
+            norm = source_key.get("normalize", "first")
+            value = getattr(w, src, None)
+            if value is None and isinstance(w, dict) and src in w:
+                value = w[src]
+            fields[target_key] = _normalize_date(value, mode=norm)
+            continue
+
+        # Caso normal: mapeo inválido → None
         if not isinstance(source_key, str) or not source_key:
             fields[target_key] = None
             continue
 
+        # Obtención del valor (atributo o clave de dict)
         value = getattr(w, source_key, None)
         if value is None and isinstance(w, dict) and source_key in w:
             value = w[source_key]
 
-        fields[target_key] = normalize_value(value)
+        # Caso específico: registrant_name ← person (solo aquí concatenamos arrays) (caso .br)
+        if target_key == "registrant_name" and source_key == "person":
+            if isinstance(value, (list, tuple)) and all(isinstance(v, str) for v in value):
+                value = ", ".join(v.strip() for v in value if v and v.strip())
+
+        # Si es campo de fecha pero definido como string en el adapter
+        if target_key in DATE_KEYS:
+            # por defecto usa "first"
+            fields[target_key] = _normalize_date(value, mode="first")
+            continue
+
+        fields[target_key] = _normalize_value(value)
 
 
     country_map = parser.get("country_map", {})
@@ -106,7 +175,7 @@ def get_whois(domain):
         if value is None and isinstance(w, dict) and source_key in w:
             value = w[source_key]
 
-        country[target_key] = normalize_value(value)
+        country[target_key] = _normalize_value(value)
 
     parsed_response = {
         "tld": parser["tld"],
@@ -125,7 +194,5 @@ def get_whois(domain):
     #return normalized whois
     print(json.dumps(parsed_response, indent=4, ensure_ascii=False))
 
-# MAPEAR LOS CAMPOS DE DATE A UNICO SRING de los adapters que lo necesitan
-
 if __name__ == "__main__":
-    get_whois("jprs.jp")
+    asyncio.run(get_whois("bondia.ad"))

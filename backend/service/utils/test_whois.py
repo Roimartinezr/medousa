@@ -1,6 +1,6 @@
 import whois
 
-w = whois.whois("earlychildhoodaustralia.org.au")
+w = whois.whois("angel.co")
 
 print(w)                     # imprime todo el objeto
 print("Country:", w.country) # a veces viene aquí
