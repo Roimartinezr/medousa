@@ -6,7 +6,7 @@
     "tld": { "type": "string" },
     "registry": { "type": "string" },
     "country": { 
-      "type": "object",
+      "type": ["object", "null"],
       "properties": {
         "code": { "type": "string" },
         "state": { "type": "string" },
@@ -16,23 +16,23 @@
     "fields": {
       "type": "object",
       "properties": {
-        "domain_name": { "type": "string" },
-        "registrant": { "type": "string" },
-        "registrant_name": { "type": "string" },
-        "registrar": { "type": "string" },
+        "domain_name": { "type": ["string", "null"] },
+        "registrant": { "type": ["string", "null"] },
+        "registrant_name": { "type": ["string", "null"] },
+        "registrar": { "type": ["string", "null"] },
         "emails" : { 
-            "type": ["string", "array"],
+            "type": ["string", "array", "null"],
             "items": { "type": "string" } 
         },
-        "creation_date": { "type": "string" },
-        "expiration_date": { "type": "string" },
-        "updated_date": { "type": "string" },
+        "creation_date": { "type": ["string", "null"] },
+        "expiration_date": { "type": ["string", "null"] },
+        "updated_date": { "type": ["string", "null"] },
         "name_servers": { 
-            "type": "array",
+            "type": ["string", "array", "null"],
             "items": { "type" : "string" } 
         },
         "status": {
-          "type": ["string", "array"],
+          "type": ["string", "array", "null"],
           "items": { "type": "string" }
         }
       },

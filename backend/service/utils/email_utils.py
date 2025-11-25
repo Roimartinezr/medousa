@@ -4,8 +4,8 @@ from typing import Dict
 from email_validator import validate_email, caching_resolver, EmailNotValidError
 import tldextract
 import whois  # <-- NUEVO: librería whois para .com y gTLD
-from ...scrap.dondominio import DonDominioAsync, get_owner_via_dondominio
-from ...scrap.whois_web import get_registrant_country_code, get_registrant_organization
+from ...scrap.web.dondominio import DonDominioAsync, get_owner_via_dondominio
+from ...scrap.web.whois_web import get_registrant_country_code, get_registrant_organization
 from ..known_brands_service import guess_brand_from_whois
 from ..omit_words_service import get_all_omit_words
 import logging
