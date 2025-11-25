@@ -37,6 +37,82 @@ def _clean_text(text: str) -> str:
 
 
 # ---------- WHOIS parsing genérico ----------
+def fix_esnic_dns_block(text: str) -> str:
+    """
+    Normaliza el bloque WHOIS .es de 'Servidores DNS' eliminando la línea vacía
+    inmediatamente posterior y convirtiendo el resto en 'Servidores DNS: valor'.
+    """
+    lines = text.splitlines()
+    out = []
+    inside_dns_block = False
+    skip_next_blank = False
+
+    for line in lines:
+        stripped = line.strip()
+
+        # Detectar encabezado "Servidores DNS"
+        if stripped.lower() == "servidores dns":
+            inside_dns_block = True
+            skip_next_blank = True   # <- ESTA ES LA CLAVE
+            continue
+
+        # Si estamos dentro del bloque DNS
+        if inside_dns_block:
+
+            # Quitar SOLO la primera línea vacía después del encabezado
+            if skip_next_blank:
+                if stripped == "":
+                    skip_next_blank = False
+                    continue
+                else:
+                    # No era vacía, procesarla normalmente
+                    skip_next_blank = False
+
+            # Fin del bloque: aparece una clave tipo X: Y
+            if ":" in stripped:
+                inside_dns_block = False
+                out.append(line)
+                continue
+
+            # Línea DNS válida
+            if stripped != "":
+                out.append(f"Servidores DNS: {stripped}")
+                continue
+
+            # Otras líneas vacías dentro del bloque DNS se ignoran
+            continue
+
+        # Caso general fuera del bloque
+        out.append(line)
+
+    return "\n".join(out)
+def enumerate_nombre_keys_esnic(text: str) -> str:
+    """
+    En WHOIS .es, renombra las claves 'Nombre:' como 'Nombre_1:', 'Nombre_2:', etc.,
+    en el orden en que aparecen, para evitar colisiones al jsonear.
+    """
+    lines = text.splitlines()
+    out = []
+    count = 0
+
+    # Coincide exactamente líneas del tipo: Nombre: algo
+    pattern = re.compile(r"^(Nombre)(\s*:\s*)(.*)$")
+
+    for line in lines:
+        m = pattern.match(line.strip())
+        if m:
+            count += 1
+            # reconstruimos con el texto original pero cambiando la clave
+            # usamos strip() en el match, así que recomponemos sin espacios extra delante
+            new_key = f"Nombre_{count}"
+            new_line = f"{new_key}{m.group(2)}{m.group(3)}"
+            out.append(new_line)
+        else:
+            out.append(line)
+
+    return "\n".join(out)
+
+
 def whois_to_json(whois_text: str) -> Dict[str, Any]:
     """
     Convierte un bloque WHOIS en JSON con key-values.
@@ -239,7 +315,11 @@ async def get_whois_json_via_dondominio(api: DonDominioAsync, domain: str) -> Di
         }
 
     # Jsonea todo el WHOIS (key-values y arrays para claves repetidas)
-    parsed = whois_to_json(_clean_text(_norm(whois_text)))
+    cleaned = _clean_text(_norm(whois_text))
+    if tld == "es":
+        cleaned = fix_esnic_dns_block(cleaned)
+        cleaned = enumerate_nombre_keys_esnic(cleaned)
+    parsed = whois_to_json(cleaned)
 
     result = {
         "domain": domain,
@@ -263,4 +343,4 @@ async def main(domain):
         return p
 
 """if __name__ == "__main__":
-    asyncio.run(main())"""
+    asyncio.run(main("bancosantander.es"))"""

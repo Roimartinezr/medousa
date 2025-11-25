@@ -193,6 +193,7 @@ async def get_whois(domain):
     
     #return normalized whois
     print(json.dumps(parsed_response, indent=4, ensure_ascii=False))
+    return parsed_response
 
 if __name__ == "__main__":
-    asyncio.run(get_whois("bondia.ad"))
+    asyncio.run(get_whois("medousa.es"))
