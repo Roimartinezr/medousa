@@ -29,6 +29,7 @@ import os
 import logging
 import asyncio
 from datetime import datetime
+from typing import Optional
 from jsonschema import validate, ValidationError
 from ...opensearch_client import get_opensearch_client
 from ..scrap.whois_socket import whois_query
@@ -37,6 +38,65 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 DATE_KEYS = {"creation_date", "expiration_date", "updated_date"}
+# Reglas específicas para TLD .ua
+UA_MULTI_VALUE_TLD = "ua"
+UA_SENTINELS = {"n/a", "not published"}
+
+def _ua_resolve_multi_source_field(source_key: str, w: dict) -> Optional[str]:
+    """
+    Para TLD .ua, permite expresiones del tipo:
+        'a | b | c'
+    y devuelve:
+        - CSV con valores únicos
+        - filtrando sentinels ('n/a', 'not published')
+        - aplanando listas
+        - normalizando datetime → string
+    """
+    if "|" not in source_key:
+        return None  # no es multi-source
+
+    candidates = [p.strip() for p in source_key.split("|") if p.strip()]
+    collected = []
+
+    for candidate in candidates:
+        v = getattr(w, candidate, None)
+        if v is None and isinstance(w, dict) and candidate in w:
+            v = w[candidate]
+        if v is None:
+            continue
+
+        # Aplana listas/tuplas/sets
+        if isinstance(v, (list, tuple, set)):
+            collected.extend(v)
+        else:
+            collected.append(v)
+
+    cleaned = []
+    seen = set()
+
+    for v in collected:
+        if v is None:
+            continue
+
+        # Normalizar datetime
+        if isinstance(v, datetime):
+            v = v.isoformat()
+
+        v_str = str(v).strip()
+        if not v_str:
+            continue
+
+        # Filtrar valores vacíos para Hostmaster.ua
+        if v_str.lower() in UA_SENTINELS:
+            continue
+
+        if v_str in seen:
+            continue
+
+        seen.add(v_str)
+        cleaned.append(v_str)
+
+    return ", ".join(cleaned) if cleaned else None
 
 def _normalize_date(value, mode="first"):
     """
@@ -124,9 +184,6 @@ async def get_whois(domain):
             logger.warning(f"[scrap fallback] error al cargar módulo '{scraping_site}': {e}")
             w = None
 
-
-    #w = json.loads(w)
-
     # parse response
     fields = {}
     for target_key, source_key in fields_map.items():
@@ -150,6 +207,15 @@ async def get_whois(domain):
         if value is None and isinstance(w, dict) and source_key in w:
             value = w[source_key]
 
+        # --- ESPECIAL .ua: expresión multi-source "a | b | c" ---
+        if tld == UA_MULTI_VALUE_TLD and isinstance(source_key, str) and "|" in source_key:
+            value = _ua_resolve_multi_source_field(source_key, w)
+        else:
+            # comportamiento normal
+            value = getattr(w, source_key, None)
+            if value is None and isinstance(w, dict) and source_key in w:
+                value = w[source_key]
+
         # Caso específico: registrant_name ← person (solo aquí concatenamos arrays) (caso .br)
         if target_key == "registrant_name" and source_key == "person":
             if isinstance(value, (list, tuple)) and all(isinstance(v, str) for v in value):
@@ -164,7 +230,7 @@ async def get_whois(domain):
         fields[target_key] = _normalize_value(value)
 
 
-    country_map = parser.get("country_map", {})
+    country_map = parser.get("country", {})
     country = {}
     for target_key, source_key in country_map.items():
         if not isinstance(source_key, str) or not source_key:
@@ -196,4 +262,4 @@ async def get_whois(domain):
     return parsed_response
 
 if __name__ == "__main__":
-    asyncio.run(get_whois("medousa.es"))
+    asyncio.run(get_whois("kyivstar.ua"))

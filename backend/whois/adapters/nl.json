@@ -2,15 +2,15 @@
   "tld": "nl",
   "registry": "SIDN",
   "fields": {
-    "domain_name": "domain_name",
-    "registrant_organization": "tech_name",
+    "domain_name": "domain_information__domain",
+    "registrant_organization": "registrant_contact__name",
     "registrant_name": null,
-    "registrar": "url",
+    "registrar": "registrar_information__registrar",
     "emails": null,
-    "creation_date": "creation_date",
-    "expiration_date": "expiration_date",
-    "updated_date": "updated_date",
-    "name_servers": "name_servers",
-    "status": "status"
+    "creation_date": "domain_information__registered_on",
+    "expiration_date": null,
+    "updated_date": "domain_information__updated_on",
+    "name_servers": "domain_information__name_servers",
+    "status": "domain_information__status"
   }
 }

@@ -8,9 +8,12 @@
     "country": { 
       "type": ["object", "null"],
       "properties": {
-        "code": { "type": "string" },
-        "state": { "type": "string" },
-        "city": { "type": "string" }
+        "code": { "type": ["string", "null"] },
+        "state": { 
+            "type": ["string", "array", "null"],
+            "items": { "type": "string" } 
+        },
+        "city": { "type": ["string", "null"] }
       }
     },
     "fields": {

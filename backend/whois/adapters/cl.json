@@ -11,6 +11,6 @@
     "expiration_date": "expiration_date",
     "updated_date": null,
     "name_servers": "name_server",
-    "status": "status"
+    "status": null
   }
 }

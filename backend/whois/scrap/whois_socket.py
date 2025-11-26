@@ -28,4 +28,4 @@ def whois_query(domain, server, port=43):
             result[key] = value
     
     # Convertir a JSON
-    return json.dumps(result, indent=4, ensure_ascii=False)
+    return result
