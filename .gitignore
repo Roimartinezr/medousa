@@ -1,3 +1,6 @@
+.os-config
+prueba.os.http
+
 # ─── FRONTEND ──────────────────────────────────────────────
 node_modules/
 dist/

@@ -28,3 +28,13 @@ def whois_query(domain, server, port=43):
             result[key] = value
     
     return result
+
+"""if __name__ == "__main__":
+    domain_to_test = "allegro.pl"
+    whois_server = "whois.dns.pl"
+    
+    try:
+        whois_info = whois_query(domain_to_test, whois_server)
+        print(json.dumps(whois_info, indent=4))
+    except Exception as e:
+        print(f"An error occurred: {e}")"""
