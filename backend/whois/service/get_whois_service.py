@@ -172,7 +172,7 @@ async def get_whois(domain):
     # scrap
     if scraping_site == "whois":
         w = whois.whois(domain)
-    elif scraping_site.startswith("whois.nic"):
+    elif scraping_site.startswith("whois."):
         w = whois_query(domain=domain, server=scraping_site)
     else: 
         # scrap dinámico desde scrap/<scraping_site>.py
@@ -262,4 +262,4 @@ async def get_whois(domain):
     return parsed_response
 
 if __name__ == "__main__":
-    asyncio.run(get_whois("kyivstar.ua"))
+    asyncio.run(get_whois("santen.eu"))

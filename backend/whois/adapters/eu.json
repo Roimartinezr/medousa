@@ -2,15 +2,15 @@
   "tld": "eu",
   "registry": "EURid",
   "fields": {
-    "domain_name": "domain_name",
-    "registrant": "name",
+    "domain_name": "General_Domain name",
+    "registrant": "Registrant_Organisation",
     "registrant_name": null,
-    "registrar": "registrar",
-    "emails": "emails",
-    "creation_date": "creation_date",
-    "expiration_date": "expiration_date",
+    "registrar": "General_Registrar",
+    "emails": "Registrant_Email",
+    "creation_date": "General_Registered",
+    "expiration_date": null,
     "updated_date": null,
-    "name_servers": "name_servers",
-    "status": "status"
+    "name_servers": "Name_servers_Name servers",
+    "status": "General_Status"
   }
 }
