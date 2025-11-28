@@ -1,6 +1,6 @@
 {
-  "tld": "eu",
-  "registry": "EURid",
+  "tld": "pl",
+  "registry": "NASK",
   "fields": {
     "domain_name": "domain_name",
     "registrant": "registrant_organization",

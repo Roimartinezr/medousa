@@ -30,8 +30,8 @@ def whois_query(domain, server, port=43):
     return result
 
 """if __name__ == "__main__":
-    domain_to_test = "allegro.pl"
-    whois_server = "whois.dns.pl"
+    domain_to_test = "publico.pt"
+    whois_server = "whois.dns.pt"
     
     try:
         whois_info = whois_query(domain_to_test, whois_server)

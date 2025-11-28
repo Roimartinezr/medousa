@@ -1,0 +1,16 @@
+{
+  "tld": "pt",
+  "registry": "Associação DNS.PT",
+  "fields": {
+    "domain_name": "domain",
+    "registrant": "owner_name",
+    "registrant_name": null,
+    "registrar": "admin_name",
+    "emails": "owner_email",
+    "creation_date": "creation_date",
+    "expiration_date": "expiration_date",
+    "updated_date": null,
+    "name_servers": "name_server",
+    "status": "domain_status"
+  }
+}
