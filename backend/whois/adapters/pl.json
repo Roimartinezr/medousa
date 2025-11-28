@@ -1,0 +1,16 @@
+{
+  "tld": "eu",
+  "registry": "EURid",
+  "fields": {
+    "domain_name": "domain_name",
+    "registrant": "registrant_organization",
+    "registrant_name": "registrant_name",
+    "registrar": "registrar",
+    "emails": "registrant_email",
+    "creation_date": "domain_created",
+    "expiration_date": "domain_expired",
+    "updated_date": "domain_modified",
+    "name_servers": "domain_nameservers_name",
+    "status": "domain_state"
+  }
+}

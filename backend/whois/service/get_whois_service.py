@@ -262,4 +262,4 @@ async def get_whois(domain):
     return parsed_response
 
 if __name__ == "__main__":
-    asyncio.run(get_whois("santen.eu"))
+    asyncio.run(get_whois("allegro.pl"))
