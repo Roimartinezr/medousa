@@ -161,7 +161,7 @@ async def main(domain: str) -> Optional[Dict[str, Any]]:
     return await scraper.scrape(domain)
 
 # --- TEST LOCAL ---
-if __name__ == "__main__":
+"""if __name__ == "__main__":
     import asyncio
     logging.basicConfig(level=logging.INFO)
 
@@ -174,4 +174,4 @@ if __name__ == "__main__":
         else:
             print("Falló o no encontrado.")
 
-    asyncio.run(test())
+    asyncio.run(test())"""

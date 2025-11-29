@@ -1,0 +1,16 @@
+{
+  "tld": "se",
+  "registry": "Internetstiftelsen",
+  "fields": {
+    "domain_name": "domain",
+    "registrant_organization": "org",
+    "registrant_name": null,
+    "registrar": "registrar",
+    "emails": null,
+    "creation_date": "created",
+    "expiration_date": "expires",
+    "updated_date": "modified",
+    "name_servers": "nserver",
+    "status": "status"
+  }
+}

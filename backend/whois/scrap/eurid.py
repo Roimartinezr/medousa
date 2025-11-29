@@ -224,7 +224,7 @@ async def main(domain: str) -> Optional[Dict[str, Any]]:
             logger.error(f"Excepción en eurid.py: {e}")
             return None
 
-if __name__ == "__main__":
+"""if __name__ == "__main__":
     import asyncio
     import json
     import sys
@@ -244,4 +244,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(test())
     except KeyboardInterrupt:
-        pass
+        pass"""

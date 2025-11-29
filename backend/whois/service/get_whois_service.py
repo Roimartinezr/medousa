@@ -11,6 +11,7 @@ client = get_opensearch_client()
 from opensearchpy import OpenSearch
 INDEX_ASCII_CCTLD = "ascii_cctld"
 INDEX_IDN_CCTLD = "idn_cctld"
+
 def get_client() -> OpenSearch:
     return OpenSearch(
         hosts=[{"host": "localhost", "port": "9200"}],
@@ -20,13 +21,13 @@ def get_client() -> OpenSearch:
         ssl_show_warn=False,
     )
 
-
 import tldextract
 import whois
 import json
 import importlib
 import os
 import logging
+import sys # Importar sys para el StreamHandler
 import asyncio
 from datetime import datetime
 from typing import Optional
@@ -34,110 +35,61 @@ from jsonschema import validate, ValidationError
 from ...opensearch_client import get_opensearch_client
 from ..scrap.whois_socket import whois_query
 
+# --- MODIFICACIÓN 1: Configuración Global de Logging ---
+# Esto asegura que los logs de whois_socket y los scrapers dinámicos se vean en consola.
+logging.basicConfig(
+    level=logging.INFO, # Nivel base (INFO o DEBUG)
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 DATE_KEYS = {"creation_date", "expiration_date", "updated_date"}
-# Reglas específicas para TLD .ua
 UA_MULTI_VALUE_TLD = "ua"
 UA_SENTINELS = {"n/a", "not published"}
 
+# ... [Las funciones _ua_resolve_multi_source_field, _normalize_date, _normalize_value siguen igual] ...
 def _ua_resolve_multi_source_field(source_key: str, w: dict) -> Optional[str]:
-    """
-    Para TLD .ua, permite expresiones del tipo:
-        'a | b | c'
-    y devuelve:
-        - CSV con valores únicos
-        - filtrando sentinels ('n/a', 'not published')
-        - aplanando listas
-        - normalizando datetime → string
-    """
-    if "|" not in source_key:
-        return None  # no es multi-source
-
+    # (Código omitido por brevedad, no cambia)
+    if "|" not in source_key: return None
     candidates = [p.strip() for p in source_key.split("|") if p.strip()]
     collected = []
-
     for candidate in candidates:
         v = getattr(w, candidate, None)
-        if v is None and isinstance(w, dict) and candidate in w:
-            v = w[candidate]
-        if v is None:
-            continue
-
-        # Aplana listas/tuplas/sets
-        if isinstance(v, (list, tuple, set)):
-            collected.extend(v)
-        else:
-            collected.append(v)
-
+        if v is None and isinstance(w, dict) and candidate in w: v = w[candidate]
+        if v is None: continue
+        if isinstance(v, (list, tuple, set)): collected.extend(v)
+        else: collected.append(v)
     cleaned = []
     seen = set()
-
     for v in collected:
-        if v is None:
-            continue
-
-        # Normalizar datetime
-        if isinstance(v, datetime):
-            v = v.isoformat()
-
+        if v is None: continue
+        if isinstance(v, datetime): v = v.isoformat()
         v_str = str(v).strip()
-        if not v_str:
-            continue
-
-        # Filtrar valores vacíos para Hostmaster.ua
-        if v_str.lower() in UA_SENTINELS:
-            continue
-
-        if v_str in seen:
-            continue
-
+        if not v_str: continue
+        if v_str.lower() in UA_SENTINELS: continue
+        if v_str in seen: continue
         seen.add(v_str)
         cleaned.append(v_str)
-
     return ", ".join(cleaned) if cleaned else None
 
 def _normalize_date(value, mode="first"):
-    """
-    Convierte listas de fechas o datetime a string ISO.
-    mode puede ser 'first' o 'last'.
-    """
-    if value is None:
-        return None
-
-    # Si es lista de fechas
+    if value is None: return None
     if isinstance(value, (list, tuple)):
-        if not value:
-            return None
-        if mode == "first":
-            value = value[0]
-        elif mode == "last":
-            value = value[-1]
-
-    # Si es datetime → string ISO
-    if isinstance(value, datetime):
-        return value.isoformat()
-
-    # Si es string → return tal cual
-    if isinstance(value, str):
-        return value.strip() or None
-
+        if not value: return None
+        if mode == "first": value = value[0]
+        elif mode == "last": value = value[-1]
+    if isinstance(value, datetime): return value.isoformat()
+    if isinstance(value, str): return value.strip() or None
     return str(value)
 
 def _normalize_value(value, mode="first"):
-    if value is None:
-        return None
-
-    # cadenas vacías → None
-    if isinstance(value, str) and value.strip() == "":
-        return None
-    
-    # datetime → string ISO
-    if isinstance(value, datetime):
-        return value.isoformat()
+    if value is None: return None
+    if isinstance(value, str) and value.strip() == "": return None
+    if isinstance(value, datetime): return value.isoformat()
     return value
-
 
 async def get_whois(domain):
     # estract tld from domain
@@ -169,19 +121,32 @@ async def get_whois(domain):
     src = doc["_source"]
     scraping_site = src.get("scraping_site", "") or ""
 
-    # scrap
+    logger.info(f"Scraping site detectado: {scraping_site} para dominio: {domain}")
+
+    # --- MODIFICACIÓN 2: Lógica de scrap con logging activado ---
     if scraping_site == "whois":
         w = whois.whois(domain)
     elif scraping_site.startswith("whois."):
+        # Activar logs específicamente para el socket
+        logging.getLogger("backend.scrap.whois_socket").setLevel(logging.DEBUG)
         w = whois_query(domain=domain, server=scraping_site)
     else: 
         # scrap dinámico desde scrap/<scraping_site>.py
         try:
             mod_name = f"backend.whois.scrap.{scraping_site}"
+            
+            # Forzar nivel DEBUG para el módulo que vamos a importar
+            # Esto asegura que veamos prints/logs internos de ese script específico
+            dyn_logger = logging.getLogger(mod_name)
+            dyn_logger.setLevel(logging.DEBUG)
+            
+            # Importar y ejecutar
             scrap_module = importlib.import_module(mod_name)
+            logger.info(f"Ejecutando módulo dinámico: {mod_name}")
             w = await scrap_module.main(domain)
+            
         except Exception as e:
-            logger.warning(f"[scrap fallback] error al cargar módulo '{scraping_site}': {e}")
+            logger.warning(f"[scrap fallback] error al cargar módulo '{scraping_site}': {e}", exc_info=True)
             w = None
 
     # parse response
@@ -262,4 +227,4 @@ async def get_whois(domain):
     return parsed_response
 
 if __name__ == "__main__":
-    asyncio.run(get_whois("fcporto.pt"))
+    asyncio.run(get_whois("swedbank.se"))

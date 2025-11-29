@@ -316,7 +316,7 @@ async def main(domain: str) -> Dict[str, Any]:
     return parse_whois_html_to_json(html, domain=domain)
 
 
-if __name__ == "__main__":
+"""if __name__ == "__main__":
     # Debug local rápido (síncrono)
     import json
     dom = "kyivstar.ua"
@@ -325,4 +325,4 @@ if __name__ == "__main__":
         data = parse_whois_html_to_json(html, domain=dom)
         print(json.dumps(data, indent=2, ensure_ascii=False))
     else:
-        print("No se pudo descargar el HTML de whois.com")
+        print("No se pudo descargar el HTML de whois.com")"""
