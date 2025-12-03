@@ -116,7 +116,7 @@ async def get_whois(domain):
 
     # get tld BD's data
     #client = get_opensearch_client()
-    client = get_client()
+    client = get_opensearch_client()
     doc = client.get(index=index, id=tld)
     src = doc["_source"]
     scraping_site = src.get("scraping_site", "") or ""
@@ -226,5 +226,5 @@ async def get_whois(domain):
     print(json.dumps(parsed_response, indent=4, ensure_ascii=False))
     return parsed_response
 
-if __name__ == "__main__":
-    asyncio.run(get_whois("swedbank.se"))
+"""if __name__ == "__main__":
+    asyncio.run(get_whois("swedbank.se"))"""

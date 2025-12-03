@@ -3,9 +3,8 @@ import re
 from typing import Dict
 from email_validator import validate_email, caching_resolver, EmailNotValidError
 import tldextract
-import whois  # <-- NUEVO: librería whois para .com y gTLD
-from ...scrap.web.dondominio import DonDominioAsync, get_owner_via_dondominio
-from ...scrap.web.whois_web import get_registrant_country_code, get_registrant_organization
+import whois
+from ...whoare.service.service import ScrapWhoisService
 from ..known_brands_service import guess_brand_from_whois
 from ..omit_words_service import get_all_omit_words
 import logging
@@ -40,6 +39,9 @@ def _is_omit_word(word: str) -> bool:
         _load_omit_words_cache()
     return word in OMIT_WORDS_CACHE
 
+def _is_supported_tld(tld: str) -> bool:
+
+
 # ========================= COMPANY DETECTION ==========================
 # checks if mail is a real direction
 def validate_mail(mail):
@@ -63,7 +65,6 @@ def extract_domain_from_email(email):
         return email.split('@')[1].lower()
     except IndexError:
         return None
-
 
 def extract_company_from_domain(domain: str) -> Dict:
     """
@@ -131,7 +132,6 @@ def extract_company_from_domain(domain: str) -> Dict:
         "confidence": confidence,
         "candidate_text": candidate_str,
     }
-
 
 
 # ========================= DOMAIN LEGITMACY ===========================
