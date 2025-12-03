@@ -35,7 +35,7 @@ from jsonschema import validate, ValidationError
 from ...opensearch_client import get_opensearch_client
 from ..scrap.whois_socket import whois_query
 
-# --- MODIFICACIÓN 1: Configuración Global de Logging ---
+# --- Configuración Global de Logging ---
 # Esto asegura que los logs de whois_socket y los scrapers dinámicos se vean en consola.
 logging.basicConfig(
     level=logging.INFO, # Nivel base (INFO o DEBUG)
@@ -91,7 +91,7 @@ def _normalize_value(value, mode="first"):
     if isinstance(value, datetime): return value.isoformat()
     return value
 
-async def get_whois(domain):
+async def get_whois_cctld(domain: str):
     # estract tld from domain
     ext = tldextract.extract(domain)
     tld = ext.suffix.split('.')[-1]
@@ -115,7 +115,7 @@ async def get_whois(domain):
         schema = json.load(f)
 
     # get tld BD's data
-    #client = get_opensearch_client()
+    #client = get_client()
     client = get_opensearch_client()
     doc = client.get(index=index, id=tld)
     src = doc["_source"]
@@ -133,7 +133,7 @@ async def get_whois(domain):
     else: 
         # scrap dinámico desde scrap/<scraping_site>.py
         try:
-            mod_name = f"backend.whois.scrap.{scraping_site}"
+            mod_name = f"backend.whoare.scrap.{scraping_site}"
             
             # Forzar nivel DEBUG para el módulo que vamos a importar
             # Esto asegura que veamos prints/logs internos de ese script específico
@@ -218,13 +218,46 @@ async def get_whois(domain):
     # validate with schema
     try:
         validate(instance=parsed_response, schema=schema)
-        print("✅ WHOIS response is valid")
     except ValidationError as e:
         print("❌ WHOIS response is invalid:", e.message)
     
     #return normalized whois
-    print(json.dumps(parsed_response, indent=4, ensure_ascii=False))
+    #print(json.dumps(parsed_response, indent=4, ensure_ascii=False))
     return parsed_response
 
+async def get_whois_gtld(domain: str):
+    """
+    Realiza un whois simple usando la librería standard.
+    Retorna la respuesta cruda (raw) convertida a dict + flag gTLD.
+    """
+    logger.info(f"[gTLD] Iniciando whois simple para: {domain}")
+    
+    try:
+        # Ejecutamos en thread para no bloquear el loop asíncrono
+        w = await asyncio.to_thread(whois.whois, domain)
+        
+        if not w:
+            return None
+
+        # Convertimos a dict
+        if not isinstance(w, dict):
+            try:
+                response = dict(w)
+            except Exception:
+                # Si falla la conversión (ej: es un string de error), lo encapsulamos
+                response = {"raw_text": str(w)}
+        else:
+            response = w
+
+        # Añadimos el flag requerido
+        response["gTLD"] = "true"
+        #print(response)
+        return response
+
+    except Exception as e:
+        logger.error(f"[gTLD] Error procesando {domain}: {e}")
+        return None
+
+
 """if __name__ == "__main__":
-    asyncio.run(get_whois("swedbank.se"))"""
+    print(asyncio.run(get_whois_cctld("swedbank.se")))"""

@@ -39,8 +39,6 @@ def _is_omit_word(word: str) -> bool:
         _load_omit_words_cache()
     return word in OMIT_WORDS_CACHE
 
-def _is_supported_tld(tld: str) -> bool:
-
 
 # ========================= COMPANY DETECTION ==========================
 # checks if mail is a real direction
