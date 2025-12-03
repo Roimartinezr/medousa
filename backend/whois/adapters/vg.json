@@ -1,15 +1,20 @@
 {
-  "tld": "ch",
-  "registry": "SWITCH",
+  "tld": "vg",
+  "registry": "Adamsnames",
+  "country": {
+    "code": "registrant_contact__country",
+    "state": "registrant_contact__state",
+    "city": null
+  },
   "fields": {
     "domain_name": "domain_information__domain",
     "registrant": null,
-    "registrant_name": null,
+    "registrant_name": null, 
     "registrar": "registrar_information__registrar",
     "emails": null,
     "creation_date": "domain_information__registered_on",
-    "expiration_date": null,
-    "updated_date": null,
+    "expiration_date": "domain_information__expires_on",
+    "updated_date": "domain_information__updated_on",
     "name_servers": "domain_information__name_servers",
     "status": "domain_information__status"
   }
