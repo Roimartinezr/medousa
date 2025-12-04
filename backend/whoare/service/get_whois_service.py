@@ -1,26 +1,4 @@
 #app/backend/scrap/service/scrap_owner_service.py
-
-"""
-En DESARROLLO: 
-probar funcionamiento de la clase con: python -m backend.scrap.service.scrap_owner_service 
-client = get_client()
-
-En PRODUCCION:
-client = get_opensearch_client()
-"""
-from opensearchpy import OpenSearch
-INDEX_ASCII_CCTLD = "ascii_cctld"
-INDEX_IDN_CCTLD = "idn_cctld"
-
-def get_client() -> OpenSearch:
-    return OpenSearch(
-        hosts=[{"host": "localhost", "port": "9200"}],
-        http_compress=True,
-        use_ssl=False,
-        verify_certs=False,
-        ssl_show_warn=False,
-    )
-
 import tldextract
 import whois
 import json
@@ -32,7 +10,8 @@ import asyncio
 from datetime import datetime
 from typing import Optional
 from jsonschema import validate, ValidationError
-from ...opensearch_client import get_opensearch_client
+from ...service.ascii_cctld_service import get_ascii_cctld_by_id
+from ...service.idn_cctld_service import get_idn_cctld_by_id
 from ..scrap.whois_socket import whois_query
 
 # --- Configuración Global de Logging ---
@@ -85,7 +64,7 @@ def _normalize_date(value, mode="first"):
     if isinstance(value, str): return value.strip() or None
     return str(value)
 
-def _normalize_value(value, mode="first"):
+def _normalize_value(value):
     if value is None: return None
     if isinstance(value, str) and value.strip() == "": return None
     if isinstance(value, datetime): return value.isoformat()
@@ -97,9 +76,9 @@ async def get_whois_cctld(domain: str):
     tld = ext.suffix.split('.')[-1]
 
     # verify if tld is punycode
-    index = INDEX_ASCII_CCTLD
+    idn = False
     if tld.startswith('xn--'):
-        index = INDEX_IDN_CCTLD
+        idn = True
 
     # load tld parser
     adapter_path = os.path.join(os.path.dirname(__file__), "..", "adapters", f"{tld}.json")
@@ -115,10 +94,10 @@ async def get_whois_cctld(domain: str):
         schema = json.load(f)
 
     # get tld BD's data
-    #client = get_client()
-    client = get_opensearch_client()
-    doc = client.get(index=index, id=tld)
-    src = doc["_source"]
+    if idn:
+        src = get_idn_cctld_by_id(tld)
+    else:
+        src = get_ascii_cctld_by_id(tld)
     scraping_site = src.get("scraping_site", "") or ""
 
     logger.info(f"Scraping site detectado: {scraping_site} para dominio: {domain}")

@@ -1,5 +1,7 @@
-from typing import List
+#app/backend/service/ascii_cctld_service.py
+from typing import List, Optional, Dict, Any
 from opensearchpy import OpenSearch
+from opensearchpy.exceptions import NotFoundError
 
 INDEX_ASCII_CCTLD = "ascii_cctld"
 
@@ -31,8 +33,23 @@ def get_all_ascii_cctld_ids(client = None) -> List[str]:
     hits = resp.get("hits", {}).get("hits", [])
     return [h["_id"] for h in hits]
 
+def get_ascii_cctld_by_id(tld: str, client = None) -> Optional[Dict[str, Any]]:
+    """
+    Obtiene los datos (_source) de un TLD específico buscando por su _id.
+    Retorna None si el TLD no existe.
+    """
+    if not client:
+        from ..opensearch_client import get_opensearch_client
+        client: OpenSearch = get_opensearch_client()
+
+    try:
+        doc = client.get(index=INDEX_ASCII_CCTLD, id=tld)
+        return doc.get("_source")
+    except NotFoundError:
+        return None
+
 if __name__ == "__main__":
-    def get_client() -> OpenSearch:
+    def __get_client() -> OpenSearch:
         return OpenSearch(
             hosts=[{"host": "localhost", "port": "9200"}],
             http_compress=True,
@@ -40,4 +57,4 @@ if __name__ == "__main__":
             verify_certs=False,
             ssl_show_warn=False,
         )
-    print(get_all_ascii_cctld_ids(get_client()))
+    print(get_all_ascii_cctld_ids(__get_client()))
