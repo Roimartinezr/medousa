@@ -14,7 +14,7 @@ class NotSupportedTLDError(WhoareServiceError):
     """Se lanza cuando el dominio no es válido o está vacío."""
     pass
 
-def get_client() -> OpenSearch:
+def __get_client() -> OpenSearch:
         return OpenSearch(
             hosts=[{"host": "localhost", "port": "9200"}],
             http_compress=True,
@@ -32,6 +32,8 @@ class WhoareService:
 
         tld = tldextract.extract(domain).suffix.split('.')[-1]
 
+        # DESAROLLO
+        # if tld in get_all_ascii_cctld_ids(__get_client()) or tld in get_all_idn_cctld_ids(__get_client()):
         if tld in get_all_ascii_cctld_ids() or tld in get_all_idn_cctld_ids():
 
             current_dir = Path(__file__).resolve().parent
