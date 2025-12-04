@@ -1,0 +1,16 @@
+{
+  "tld": "au",
+  "registry": "auDA",
+  "fields": {
+    "domain_name": "domain_name",
+    "registrant": "registrant_name",
+    "registrant_name": "registrant_contact_name",
+    "registrar": "registrar",
+    "emails": null,
+    "creation_date": null,
+    "expiration_date": null,
+    "updated_date": "updated_date",
+    "name_servers": "name_servers",
+    "status": "status"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "tld": "eu",
+  "registry": "EURid",
+  "fields": {
+    "domain_name": "General_Domain name",
+    "registrant": "Registrant_Organisation",
+    "registrant_name": null,
+    "registrar": "General_Registrar",
+    "emails": "Registrant_Email",
+    "creation_date": "General_Registered",
+    "expiration_date": null,
+    "updated_date": null,
+    "name_servers": "Name_servers_Name servers",
+    "status": "General_Status"
+  }
+}

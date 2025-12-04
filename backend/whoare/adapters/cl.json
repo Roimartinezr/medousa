@@ -1,0 +1,16 @@
+{
+  "tld": "cl",
+  "registry": "NIC Chile",
+  "fields": {
+    "domain_name": null,
+    "registrant": "registrant_organisation",
+    "registrant_name": "registrant_name",
+    "registrar": "registrar_name",
+    "emails": null,
+    "creation_date": "creation_date",
+    "expiration_date": "expiration_date",
+    "updated_date": null,
+    "name_servers": "name_server",
+    "status": null
+  }
+}

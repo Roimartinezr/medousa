@@ -1,0 +1,16 @@
+{
+  "tld": "vn",
+  "registry": "VNNIC",
+  "fields": {
+    "domain_name": "Tên miền",
+    "registrant_organization": "Tên chủ thể đăng ký sử dụng",
+    "registrant_name": null,
+    "registrar": "Nhà đăng ký quản lý",
+    "emails": null,
+    "creation_date": "Ngày đăng ký",
+    "expiration_date": "Ngày hết hạn",
+    "updated_date": null,
+    "name_servers": "Máy chủ DNS chuyển giao",
+    "status": "Trạng thái"
+  }
+}

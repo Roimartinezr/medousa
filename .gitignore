@@ -1,3 +1,6 @@
+.os-config
+prueba.os.http
+
 # ─── FRONTEND ──────────────────────────────────────────────
 node_modules/
 dist/
@@ -18,7 +21,7 @@ __pycache__/
 *.pyo
 *.pyd
 *.egg-info/
-venv/
+.venv/
 .env
 
 # ─── SHARED ────────────────────────────────────────────────

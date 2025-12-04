@@ -1,0 +1,16 @@
+{
+  "tld": "nl",
+  "registry": "SIDN",
+  "fields": {
+    "domain_name": "domain_information__domain",
+    "registrant_organization": "registrant_contact__name",
+    "registrant_name": null,
+    "registrar": "registrar_information__registrar",
+    "emails": null,
+    "creation_date": "domain_information__registered_on",
+    "expiration_date": null,
+    "updated_date": "domain_information__updated_on",
+    "name_servers": "domain_information__name_servers",
+    "status": "domain_information__status"
+  }
+}

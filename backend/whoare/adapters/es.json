@@ -1,0 +1,16 @@
+{
+  "tld": "es",
+  "registry": "Red.es",
+  "fields": {
+    "domain_name": "dominio",
+    "registrant": "nombre_1",
+    "registrant_name": null,
+    "registrar": "agente_registrador",
+    "emails": null,
+    "creation_date": "fecha_de_creación",
+    "expiration_date": "fecha_de_expiración",
+    "updated_date": null,
+    "name_servers": "servidores_dns",
+    "status": "estado"
+  }
+}

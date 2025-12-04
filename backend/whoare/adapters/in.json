@@ -1,0 +1,25 @@
+{
+  "tld": "in",
+  "registry": "NIXI",
+  "fields": {
+    "domain_name": "domain_name",
+    "registrant_organization": "organization",
+    "registrant_name": null,
+    "registrar": "registrar",
+    "emails": "emails",
+    "creation_date": {
+      "source": "creation_date",
+      "normalize": "first" 
+    },
+    "expiration_date": {
+      "source": "expiration_date",
+      "normalize": "last" 
+    },
+    "updated_date": {
+      "source": "updated_date",
+      "normalize": "last" 
+    },
+    "name_servers": "name_servers",
+    "status": "status"
+  }
+}

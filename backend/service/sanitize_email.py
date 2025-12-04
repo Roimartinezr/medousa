@@ -8,6 +8,11 @@ import uuid
 import re
 from Levenshtein import distance
 
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
 # ------------------ Helpers ---------------------
 def _norm_owner(s: str) -> str:
     if not s:
@@ -85,18 +90,46 @@ async def sanitize_mail(email):
                 "evidences": [],
             }
     elif v_mail != email:
-        # Anomalías ASCII
-        return {
-            "request_id": str(uuid.uuid4()),
-            "email": email,
-            "veredict": "phishing",
-            "veredict_detail": "Ascii anomaly detected",
-            "company_impersonated": None,
-            "company_detected": None,
-            "confidence": 0.0,
-            "labels": ["invalid-format", "ascii-anomaly"],
-            "evidences": [],
-        }
+        try:
+            # dominio original tal y como llega en la request (punycode)
+            _, orig_domain = email.rsplit("@", 1)
+            # dominio normalizado (Unicode) devuelto por validate_mail
+            _, norm_domain = v_mail.rsplit("@", 1)
+
+            orig_tld = orig_domain.rsplit(".", 1)[-1].lower()
+        except ValueError:
+            # Por si acaso, si algo raro pasa, mantenemos el comportamiento antiguo
+            return {
+                "request_id": str(uuid.uuid4()),
+                "email": email,
+                "veredict": "phishing",
+                "veredict_detail": "Ascii anomaly detected",
+                "company_impersonated": None,
+                "company_detected": None,
+                "confidence": 0.0,
+                "labels": ["invalid-format", "ascii-anomaly"],
+                "evidences": [],
+            }
+
+        # Si el TLD ORIGINAL es IDN (punycode), NO lo tratamos como anomalía ASCII
+        if orig_tld.startswith("xn--"):
+            # aceptamos la versión normalizada y seguimos el pipeline
+            aux = email
+            email = v_mail
+            v_mail = aux
+        else:
+            # comportamiento original: anomalía ASCII
+            return {
+                "request_id": str(uuid.uuid4()),
+                "email": email,
+                "veredict": "phishing",
+                "veredict_detail": "Ascii anomaly detected",
+                "company_impersonated": None,
+                "company_detected": None,
+                "confidence": 0.0,
+                "labels": ["invalid-format", "ascii-anomaly"],
+                "evidences": [],
+            }
 
     # 2. Extraer dominio entrante (FQDN)
     incoming_domain = extract_domain_from_email(v_mail)
@@ -170,7 +203,7 @@ async def sanitize_mail(email):
     owner_terms = ""
 
     # 3.3 Primero: comprobar si el dominio entrante YA es conocido
-    brand_doc = find_brand_by_known_domain(incoming_domain)
+    brand_doc = find_brand_by_known_domain(incoming_domain) # xxxGestionar aquí sensibilidad dominio/subdominio
     if not brand_doc and dns_root_domain != incoming_domain:
         # también probamos contra el root DNS real (bancosantander-mail.es)
         brand_doc = find_brand_by_known_domain(dns_root_domain)
@@ -180,15 +213,19 @@ async def sanitize_mail(email):
     if brand_doc:
         src_tmp = brand_doc["_source"]
         kd_tmp = set(src_tmp.get("known_domains", []))
-        if incoming_domain not in kd_tmp and dns_root_domain not in kd_tmp:
+        norm_incoming = _norm_domain(incoming_domain)
+        norm_dns_root = _norm_domain(dns_root_domain)
+        norm_known = {_norm_domain(d) for d in kd_tmp}
+
+        if norm_incoming not in norm_known and norm_dns_root not in norm_known:
             brand_doc = None
+
 
     new_brand = False
     if brand_doc:
         src = brand_doc["_source"]
-        brand_id = src.get("brand_id")
-        canonical_domain = src.get("canonical_domain") or root_domain
-        root_domain = canonical_domain  # root lógico = canonical
+        brand_id = brand_doc["_id"]
+        root_domain = f'{brand_id}.{src.get("country_code")}'
         company_detected = brand_id or company_detected
 
         brand_known_domains = set(src.get("known_domains", []))
@@ -197,20 +234,17 @@ async def sanitize_mail(email):
         brand_profile = " ".join(
             [
                 owner_terms,
-                " ".join(keywords),
-                (brand_id or ""),
-                canonical_domain.split(".")[0],
+                " ".join(keywords)
             ]
         )
 
     else:
-        # 3.4 Mirar si ya tenemos brand por canonical_domain (root lógico)
-        brand_doc = find_brand_by_canonical_domain(root_domain)
+        # 3.4 Mirar si ya tenemos brand por keywords (root lógico)
+        brand_doc = find_brand_by_keywords(ext.domain)
         if brand_doc:
             src = brand_doc["_source"]
-            brand_id = src.get("brand_id")
-            canonical_domain = src.get("canonical_domain") or root_domain
-            root_domain = canonical_domain
+            brand_id = brand_doc["_id"]
+            root_domain = f'{brand_id}.{src.get("country_code")}'
             company_detected = brand_id or company_detected
 
             brand_known_domains = set(src.get("known_domains", []))
@@ -219,9 +253,7 @@ async def sanitize_mail(email):
             brand_profile = " ".join(
                 [
                     owner_terms,
-                    " ".join(keywords),
-                    (brand_id or ""),
-                    canonical_domain.split(".")[0],
+                    " ".join(keywords)
                 ]
             )
         else:
@@ -245,13 +277,7 @@ async def sanitize_mail(email):
                 company_detected = brand_id or company_detected
                 brand_known_domains = {root_domain}
                 owner_terms = root_owner  # <-- usamos el WHOIS como owner_terms inicial
-                brand_profile = " ".join(
-                    [
-                        root_owner,
-                        (brand_id or ""),
-                        root_domain.split(".")[0],
-                    ]
-                )
+                brand_profile = " ".join(dict.fromkeys([root_owner, brand_id or ""]))
                 try:
                     add_known_domain(brand_id, root_domain)
                 except Exception:
@@ -297,7 +323,7 @@ async def sanitize_mail(email):
             if similarity >= 0.7:  # umbral ajustable
                 owners_match = True
                 try:
-                    if ext.subdomain:
+                    if ext.subdomain and brand_id:
                         dns_root_subdomain = f'{ext.subdomain}.{dns_root_domain}'
                         add_known_domain(brand_id, dns_root_subdomain)
                     add_known_domain(brand_id, dns_root_domain)
@@ -311,6 +337,10 @@ async def sanitize_mail(email):
     # ======================================================
     # 5. RELACIÓN ENTRE DOMINIOS (root lógico vs incoming)
     # ======================================================
+    subdomain_added = False
+    if ext.subdomain and brand_id:
+        add_known_domain(brand_id, incoming_domain)
+        subdomain_added = True
 
     root_dom_norm = _norm_domain(root_domain)           # bancosantander.es
     incoming_dom_norm = _norm_domain(incoming_domain)   # emailing.bancosantander-mail.es
@@ -318,42 +348,61 @@ async def sanitize_mail(email):
     if incoming_dom_norm and incoming_dom_norm == root_dom_norm:
         relation = 1  # mismo dominio base
     elif incoming_dom_norm and _is_subdomain(incoming_dom_norm, root_dom_norm):
-        add_known_domain(brand_id, incoming_domain)
+        if not subdomain_added and brand_id:
+            add_known_domain(brand_id, incoming_domain)
         relation = 2  # subdominio del dominio lógico/canónico
     else:
         relation = 0  # dominio ajeno (respecto al canonical)
 
     # root_owner para evidencias:
     if root_owner is None:
-        root_owner = "Dominio Canónico; WHOIS no necesario"
+        root_owner = "Dominio Canónico"
 
     evidences = [
         {
-            "type": root_domain,
-            "value": root_owner,
-            "score": 1.0,
-        },
-        {
-            "type": incoming_domain,
-            "value": incoming_owner,
-            "score": 0.8 if owners_match else 0.4,
+            "domain": root_domain,
+            "owner": root_owner,
+            "detail": "Detected Root Domain",
         },
     ]
 
     if relation == 1:
         evidences = [
             {
-                "type": root_domain,
-                "value": root_owner,
-                "score": 1.0,
-            },
+                "domain": root_domain,
+                "owner": root_owner,
+                "detail": "Root Domain",
+            }
         ]
     elif relation == 2:
         evidences.append(
             {
-                "type": incoming_domain,
-                "value": f"Subdominio de: {dns_root_domain}",
-                "score": 0.8 if owners_match else 0.4,
+                "domain": incoming_domain,
+                "owner": f"Subdominio de: {dns_root_domain}",
+                "detail": "Canonical Domain Subdomain",
+            }
+        )
+        evidences.append(
+            {
+                "domain": incoming_domain,
+                "owner": incoming_owner,
+                "detail": "Incoming Domain",
+            }
+        )
+    else:
+        if ext.subdomain:
+            evidences.append(
+                {
+                    "domain": f'{ext.domain}.{ext.suffix}',
+                    "owner": incoming_owner,
+                    "detail": "Incoming Superdomain",
+                }
+            )
+        evidences.append(
+            {
+                "domain": incoming_domain,
+                "owner": incoming_owner,
+                "detail": "Incoming Domain",
             }
         )
 

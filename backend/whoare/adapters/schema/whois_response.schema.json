@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WHOIS Response Model",
+  "type": "object",
+  "properties": {
+    "tld": { "type": "string" },
+    "registry": { "type": "string" },
+    "country": { 
+      "type": ["object", "null"],
+      "properties": {
+        "code": { "type": ["string", "null"] },
+        "state": { 
+            "type": ["string", "array", "null"],
+            "items": { "type": "string" } 
+        },
+        "city": { "type": ["string", "null"] }
+      }
+    },
+    "fields": {
+      "type": "object",
+      "properties": {
+        "domain_name": { "type": ["string", "null"] },
+        "registrant": { "type": ["string", "null"] },
+        "registrant_name": { "type": ["string", "null"] },
+        "registrar": { "type": ["string", "null"] },
+        "emails" : { 
+            "type": ["string", "array", "null"],
+            "items": { "type": "string" } 
+        },
+        "creation_date": { "type": ["string", "null"] },
+        "expiration_date": { "type": ["string", "null"] },
+        "updated_date": { "type": ["string", "null"] },
+        "name_servers": { 
+            "type": ["string", "array", "null"],
+            "items": { "type" : "string" } 
+        },
+        "status": {
+          "type": ["string", "array", "null"],
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "required": ["tld", "fields"]
+}

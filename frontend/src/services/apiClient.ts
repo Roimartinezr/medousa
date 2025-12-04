@@ -45,35 +45,3 @@ export const analyzeEmail = async (email: string): Promise<AnalyzeEmailResponse>
 
   return response.json();
 };
-
-// Mock function for development/demo
-export const mockAnalyzeEmail = async (email: string): Promise<AnalyzeEmailResponse> => {
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 1500));
-
-  // Mock data based on email characteristics
-  const isSuspicious = email.includes('admin') || email.includes('support') || email.endsWith('.tk');
-  const isCorporate = email.includes('@company.com') || email.includes('@corporation.com');
-  
-  return {
-    request_id: crypto.randomUUID(),
-    email,
-    veredict: isSuspicious ? 'phishing' : 'valid',
-    veredict_detail: isSuspicious 
-      ? 'Patrones sospechosos detectados en la dirección'
-      : 'La dirección parece legítima',
-    company_impersonated: isSuspicious ? 'PayPal' : null,
-    company_detected: isCorporate ? 'Tech Corporation' : null,
-    confidence: isSuspicious ? 0.25 : 0.85,
-    labels: isSuspicious 
-      ? ['posible-phishing', 'freemail', 'dominio-sospechoso']
-      : isCorporate 
-        ? ['dominio-corporativo', 'verificado']
-        : ['freemail'],
-    evidences: [
-      { type: 'Dominio', value: email.split('@')[1], score: isSuspicious ? 0.3 : 0.9 },
-      { type: 'Patrones', value: isSuspicious ? 'Sospechosos' : 'Normales', score: isSuspicious ? 0.2 : 0.8 },
-      { type: 'Reputación', value: isSuspicious ? 'Baja' : 'Alta', score: isSuspicious ? 0.25 : 0.85 },
-    ],
-  };
-};

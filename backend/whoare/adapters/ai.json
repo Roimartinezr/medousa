@@ -1,0 +1,21 @@
+{
+  "tld": "ai",
+  "registry": "Vince Cate (OIS)",
+  "country": {
+    "code": "admin_country",
+    "state": "admin_state",
+    "city": "admin_city"
+  },
+  "fields": {
+    "domain_name": "domain_name",
+    "registrant": "registrant_org",
+    "registrant_name": "registrant_name", 
+    "registrar": "registrar",
+    "emails": "registrant_email",
+    "creation_date": "creation_date",
+    "expiration_date": "expiration_date",
+    "updated_date": "updated_date",
+    "name_servers": "name_servers",
+    "status": "status"
+  }
+}

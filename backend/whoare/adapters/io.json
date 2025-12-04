@@ -1,0 +1,27 @@
+{
+  "tld": "io",
+  "registry": "ICB",
+  "country": {
+    "code": "registrant_country",
+    "state": "registrant_state_province",
+    "city": null
+  },
+  "fields": {
+    "domain_name": "domain_name",
+    "registrant": "registrant_name",
+    "registrant_name": null,
+    "registrar": "registrar",
+    "emails": null,
+    "creation_date": {
+      "source": "creation_date",
+      "normalize": "first" 
+    },
+    "expiration_date": "registry_expiry_date",
+    "updated_date": {
+      "source": "updated_date",
+      "normalize": "last" 
+    },
+    "name_servers": "name_servers",
+    "status": "status"
+  }
+}

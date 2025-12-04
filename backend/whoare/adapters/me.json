@@ -1,0 +1,16 @@
+{
+  "tld": "me",
+  "registry": "doMEn d.o.o.",
+  "fields": {
+    "domain_name": "domain_name",
+    "registrant_organization": "registrant_org",
+    "registrant_name": null, 
+    "registrar": "registrar",
+    "emails": "registrant_email",
+    "creation_date": "creation_date",
+    "expiration_date": "expiration_date",
+    "updated_date": "updated_date",
+    "name_servers": "name_servers",
+    "status": "status"
+  }
+}

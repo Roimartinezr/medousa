@@ -9,10 +9,10 @@ from waitress import serve
 
 import logging
 
-"""logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 logger.debug("DEBUG TEST: logging está activo")
-print("PRINT TEST: stdout está activo")"""
+print("PRINT TEST: stdout está activo")
 
 
 app = Flask(__name__)
@@ -47,4 +47,5 @@ if __name__ == '__main__':
     DomainSanitizerService.ensure_mail_names_index()
     DomainSanitizerService.ensure_omit_words_index()
     DomainSanitizerService.ensure_known_brands_index()
+    DomainSanitizerService.ensure_privacy_values_index()
     serve(app, host='0.0.0.0', port=8000)

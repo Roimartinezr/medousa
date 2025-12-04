@@ -1,0 +1,16 @@
+{
+  "tld": "it",
+  "registry": "IT-CNR",
+  "fields": {
+    "domain_name": "domain_name",
+    "registrant_organization": "registrant_organization",
+    "registrant_name": "admin_name",
+    "registrar": "registrar",
+    "emails": null,
+    "creation_date": "creation_date",
+    "expiration_date": "expiration_date",
+    "updated_date": "updated_date",
+    "name_servers": "name_servers",
+    "status": "status"
+  }
+}

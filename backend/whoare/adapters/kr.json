@@ -1,0 +1,16 @@
+{
+  "tld": "kr",
+  "registry": "KISA",
+  "fields": {
+    "domain_name": "domain_name",
+    "registrant_organization": "registrant_name",
+    "registrant_name": "admin_name",
+    "registrar": "registrar",
+    "emails": "admin_email",
+    "creation_date": "creation_date",
+    "expiration_date": "expiration_date",
+    "updated_date": "updated_date",
+    "name_servers": "name_servers",
+    "status": null
+  }
+}

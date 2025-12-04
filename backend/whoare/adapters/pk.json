@@ -1,0 +1,16 @@
+{
+  "tld": "pk",
+  "registry": "PKNIC",
+  "fields": {
+    "domain_name": null,
+    "registrant_organization": null,
+    "registrant_name": null,
+    "registrar": null,
+    "emails": null,
+    "creation_date": "creation_date",
+    "expiration_date": "expiration_date",
+    "updated_date": null,
+    "name_servers": "name_servers",
+    "status": "status"
+  }
+}

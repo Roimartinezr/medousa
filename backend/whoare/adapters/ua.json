@@ -1,0 +1,16 @@
+{
+  "tld": "ua",
+  "registry": "Hostmaster Ltd.",
+  "fields": {
+    "domain_name": "domain",
+    "registrant_organization": "registrant_organization | registrant_organization_loc",
+    "registrant_name": "registrant_person | registrant_person_loc",
+    "registrar": "registrar_organization | registrar_organization_loc",
+    "emails": "registrant_e_mail | administrative_contacts_e_mail | technical_contacts_e_mail | registrar_abuse_email",
+    "creation_date": "created",
+    "expiration_date": "expires",
+    "updated_date": "modified",
+    "name_servers": "nserver",
+    "status": "status"
+  }
+}
