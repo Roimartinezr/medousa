@@ -58,3 +58,25 @@ if __name__ == "__main__":
             ssl_show_warn=False,
         )
     print(get_all_ascii_cctld_ids(__get_client()))
+
+def get_fallback_by_id(tld: str, client = None) -> List[str]:
+    """
+    Devuelve la lista 'fallback' de un TLD específico dado su _id.
+    Retorna una lista vacía [] si el TLD no existe o no tiene campo fallback.
+    """
+    if not client:
+        from ..opensearch_client import get_opensearch_client
+        client: OpenSearch = get_opensearch_client()
+
+    try:
+        # Usamos _source_includes para traer SOLO el campo fallback
+        doc = client.get(
+            index=INDEX_ASCII_CCTLD, 
+            id=tld, 
+            _source_includes=["fallback"]
+        )
+        # Obtenemos el source y luego el campo, por defecto lista vacía
+        return doc.get("_source", {}).get("fallback", None)
+    except NotFoundError:
+        # Si el ID no existe, devolvemos lista vacía para evitar errores al iterar
+        return None
