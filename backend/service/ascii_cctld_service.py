@@ -48,17 +48,6 @@ def get_ascii_cctld_by_id(tld: str, client = None) -> Optional[Dict[str, Any]]:
     except NotFoundError:
         return None
 
-if __name__ == "__main__":
-    def __get_client() -> OpenSearch:
-        return OpenSearch(
-            hosts=[{"host": "localhost", "port": "9200"}],
-            http_compress=True,
-            use_ssl=False,
-            verify_certs=False,
-            ssl_show_warn=False,
-        )
-    print(get_all_ascii_cctld_ids(__get_client()))
-
 def get_fallback_by_id(tld: str, client = None) -> List[str]:
     """
     Devuelve la lista 'fallback' de un TLD específico dado su _id.
@@ -76,7 +65,18 @@ def get_fallback_by_id(tld: str, client = None) -> List[str]:
             _source_includes=["fallback"]
         )
         # Obtenemos el source y luego el campo, por defecto lista vacía
-        return doc.get("_source", {}).get("fallback", None)
+        return doc.get("_source", {}).get("fallback", [])
     except NotFoundError:
         # Si el ID no existe, devolvemos lista vacía para evitar errores al iterar
-        return None
+        return []
+
+if __name__ == "__main__":
+    def __get_client() -> OpenSearch:
+        return OpenSearch(
+            hosts=[{"host": "localhost", "port": "9200"}],
+            http_compress=True,
+            use_ssl=False,
+            verify_certs=False,
+            ssl_show_warn=False,
+        )
+    print(get_all_ascii_cctld_ids(__get_client()))
