@@ -1,5 +1,4 @@
 # app/backend/service/utils/email_utils.py
-from opensearchpy import OpenSearch
 import asyncio
 from typing import Dict
 from email_validator import validate_email, caching_resolver, EmailNotValidError
@@ -221,7 +220,7 @@ async def get_domain_owner(domain: str) -> str:
                 # PRODUCCION:
                 country = get_country_by_id(tld)
                 # DESARROLLO
-                #country = get_country_by_id(tld, _get_client())
+                #country = get_country_by_id(tld, dev=True)
                 if country:
                     fallback_domain = f"{ext.domain}.{country.strip()}".lower()
                     registrant = await get_domain_owner(fallback_domain)
@@ -243,8 +242,8 @@ async def get_domain_owner(domain: str) -> str:
 
                 # PRODUCCION:
                 fallback = get_fallback_by_id(tld)
-                # DESAROLLO:
-                #fallback = get_fallback_by_id(tld, _get_client())
+                # DESARROLLO:
+                #fallback = get_fallback_by_id(tld, dev=True)
                 fallback_domain = None
                 if fallback:
                     for cc in fallback:
@@ -269,13 +268,6 @@ async def get_domain_owner(domain: str) -> str:
     return None
 
 
-"""def _get_client() -> OpenSearch:
-        return OpenSearch(
-            hosts=[{"host": "localhost", "port": "9200"}],
-            http_compress=True,
-            use_ssl=False,
-            verify_certs=False,
-            ssl_show_warn=False,
-        )
+"""
 if __name__ == "__main__":
     print(asyncio.run(get_domain_owner("athletic-club.eus")))"""

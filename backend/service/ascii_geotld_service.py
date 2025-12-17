@@ -6,12 +6,14 @@ from opensearchpy.exceptions import NotFoundError
 INDEX_ASCII_GEOTLD = "ascii_geotld"
 
 
-def get_all_ascii_geotld_ids(client = None) -> List[str]:
+def get_all_ascii_geotld_ids(dev = False) -> List[str]:
     """
     Devuelve una lista con todos los _id del índice 'ascii_geotld'.
     Se asume que el _id es el propio GeoTLD (ej: 'cat', 'eus', 'madrid').
     """
-    if not client:
+    if dev:
+        client = __get_client()
+    else:
         from ..opensearch_client import get_opensearch_client
         client: OpenSearch = get_opensearch_client()
 
@@ -34,12 +36,14 @@ def get_all_ascii_geotld_ids(client = None) -> List[str]:
     return [h["_id"] for h in hits]
 
 
-def get_ascii_geotld_by_id(tld: str, client = None) -> Optional[Dict[str, Any]]:
+def get_ascii_geotld_by_id(tld: str, dev = False) -> Optional[Dict[str, Any]]:
     """
     Obtiene los datos (_source) de un GeoTLD específico buscando por su _id.
     Retorna None si el TLD no existe.
     """
-    if not client:
+    if dev:
+        client = __get_client()
+    else:
         from ..opensearch_client import get_opensearch_client
         client: OpenSearch = get_opensearch_client()
 
@@ -50,13 +54,15 @@ def get_ascii_geotld_by_id(tld: str, client = None) -> Optional[Dict[str, Any]]:
         return None
 
 
-def get_country_by_id(tld: str, client = None) -> Optional[str]:
+def get_country_by_id(tld: str, dev = False) -> Optional[str]:
     """
     Devuelve el campo 'country' (ej: 'es') de un GeoTLD específico dado su _id.
     Sustituye a la antigua función 'get_fallback_by_id'.
     Retorna None si el TLD no existe o el campo es nulo.
     """
-    if not client:
+    if dev:
+        client = __get_client()
+    else:
         from ..opensearch_client import get_opensearch_client
         client: OpenSearch = get_opensearch_client()
 
@@ -73,8 +79,7 @@ def get_country_by_id(tld: str, client = None) -> Optional[str]:
         return None
 
 
-"""if __name__ == "__main__":
-    def __get_client() -> OpenSearch:
+def __get_client() -> OpenSearch:
         return OpenSearch(
             hosts=[{"host": "localhost", "port": "9200"}],
             http_compress=True,
@@ -82,8 +87,10 @@ def get_country_by_id(tld: str, client = None) -> Optional[str]:
             verify_certs=False,
             ssl_show_warn=False,
         )
-    
+
+
+"""if __name__ == "__main__":    
     # Prueba rápida
-    print("IDs encontrados:", get_all_ascii_geotld_ids(__get_client()))
-    print("Info de 'eus':", get_ascii_geotld_by_id('eus', __get_client()))
-    print("País de 'madrid':", get_country_by_id('madrid', __get_client()))"""
+    print("IDs encontrados:", get_all_ascii_geotld_ids(dev=True))
+    print("Info de 'eus':", get_ascii_geotld_by_id('eus', dev=True))
+    print("País de 'madrid':", get_country_by_id('madrid', dev=True))"""

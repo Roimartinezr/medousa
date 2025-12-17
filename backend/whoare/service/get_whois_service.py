@@ -14,7 +14,6 @@ from ...service.ascii_cctld_service import get_ascii_cctld_by_id
 from ...service.idn_cctld_service import get_idn_cctld_by_id
 from ...service.ascii_geotld_service import get_ascii_geotld_by_id
 from ..scrap.whois_socket import whois_query
-from opensearchpy import OpenSearch
 
 # --- Configuración Global de Logging ---
 # Esto asegura que los logs de whois_socket y los scrapers dinámicos se vean en consola.
@@ -100,17 +99,17 @@ async def get_whois_cctld(domain: str, geoTLD = False):
         # PRODUCCION
         src = get_ascii_geotld_by_id(tld)
         # DESARROLLO
-        #src = get_ascii_geotld_by_id(tld, _get_client())
+        #src = get_ascii_geotld_by_id(tld, dev=True)
     elif idn:
         # PRODUCCION
         src = get_idn_cctld_by_id(tld)
         # DESARROLLO
-        #src = get_idn_cctld_by_id(tld, _get_client())
+        #src = get_idn_cctld_by_id(tld, dev=True)
     else:
         # PRODUCCION
         src = get_ascii_cctld_by_id(tld)
         # DESARROLLO
-        #src = get_ascii_cctld_by_id(tld, _get_client())
+        #src = get_ascii_cctld_by_id(tld, dev=True)
 
     scraping_site = src.get("scraping_site", "") or ""
 
@@ -259,14 +258,6 @@ async def get_whois_gtld(domain: str):
         logger.error(f"[gTLD] Error procesando {domain}: {e}")
         return None
 
-"""def _get_client() -> OpenSearch:
-        return OpenSearch(
-            hosts=[{"host": "localhost", "port": "9200"}],
-            http_compress=True,
-            use_ssl=False,
-            verify_certs=False,
-            ssl_show_warn=False,
-        )
-
+"""
 if __name__ == "__main__":
     print(asyncio.run(get_whois_cctld("euskadi.eus", geoTLD=True)))"""
