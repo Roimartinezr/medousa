@@ -12,6 +12,7 @@ from typing import Optional
 from jsonschema import validate, ValidationError
 from ...service.ascii_cctld_service import get_ascii_cctld_by_id
 from ...service.idn_cctld_service import get_idn_cctld_by_id
+from ...service.ascii_geotld_service import get_ascii_geotld_by_id
 from ..scrap.whois_socket import whois_query
 
 # --- Configuración Global de Logging ---
@@ -70,7 +71,7 @@ def _normalize_value(value):
     if isinstance(value, datetime): return value.isoformat()
     return value
 
-async def get_whois_cctld(domain: str):
+async def get_whois_cctld(domain: str, geoTLD = False):
     # estract tld from domain
     ext = tldextract.extract(domain)
     tld = ext.suffix.split('.')[-1]
@@ -94,10 +95,22 @@ async def get_whois_cctld(domain: str):
         schema = json.load(f)
 
     # get tld BD's data
-    if idn:
+    if geoTLD:
+        # PRODUCCION
+        src = get_ascii_geotld_by_id(tld)
+        # DESARROLLO
+        #src = get_ascii_geotld_by_id(tld, dev=True)
+    elif idn:
+        # PRODUCCION
         src = get_idn_cctld_by_id(tld)
+        # DESARROLLO
+        #src = get_idn_cctld_by_id(tld, dev=True)
     else:
+        # PRODUCCION
         src = get_ascii_cctld_by_id(tld)
+        # DESARROLLO
+        #src = get_ascii_cctld_by_id(tld, dev=True)
+
     scraping_site = src.get("scraping_site", "") or ""
 
     logger.info(f"Scraping site detectado: {scraping_site} para dominio: {domain}")
@@ -109,7 +122,9 @@ async def get_whois_cctld(domain: str):
         # Activar logs específicamente para el socket
         logging.getLogger("backend.scrap.whois_socket").setLevel(logging.DEBUG)
         w = whois_query(domain=domain, server=scraping_site)
-    else: 
+    else:
+        if not scraping_site:
+            raise NotImplemented(f"[scrap] no scraping site detected for TLD '{tld}'")
         # scrap dinámico desde scrap/<scraping_site>.py
         try:
             mod_name = f"backend.whoare.scrap.{scraping_site}"
@@ -131,7 +146,7 @@ async def get_whois_cctld(domain: str):
     # parse response
     fields = {}
     for target_key, source_key in fields_map.items():
-         # Caso especial: (fechas first/last)
+        # Caso especial: (fechas first/last)
         if isinstance(source_key, dict):
             src = source_key.get("source")
             norm = source_key.get("normalize", "first")
@@ -202,6 +217,11 @@ async def get_whois_cctld(domain: str):
     
     #return normalized whois
     #print(json.dumps(parsed_response, indent=4, ensure_ascii=False))
+    parsed_response["gTLD"] = "false"
+    parsed_response["geoTLD"] = "false"
+    if geoTLD:
+        parsed_response["geoTLD"] = "true"
+    
     return parsed_response
 
 async def get_whois_gtld(domain: str):
@@ -214,7 +234,7 @@ async def get_whois_gtld(domain: str):
     try:
         # Ejecutamos en thread para no bloquear el loop asíncrono
         w = await asyncio.to_thread(whois.whois, domain)
-        
+
         if not w:
             return None
 
@@ -230,6 +250,7 @@ async def get_whois_gtld(domain: str):
 
         # Añadimos el flag requerido
         response["gTLD"] = "true"
+        response["geoTLD"] = "false"
         #print(response)
         return response
 
@@ -237,6 +258,6 @@ async def get_whois_gtld(domain: str):
         logger.error(f"[gTLD] Error procesando {domain}: {e}")
         return None
 
-
-"""if __name__ == "__main__":
-    print(asyncio.run(get_whois_cctld("swedbank.se")))"""
+"""
+if __name__ == "__main__":
+    print(asyncio.run(get_whois_cctld("euskadi.eus", geoTLD=True)))"""

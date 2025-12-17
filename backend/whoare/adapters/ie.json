@@ -1,0 +1,16 @@
+{
+  "tld": "ie",
+  "registry": "IEDR",
+  "fields": {
+    "domain_name": "domain_name",
+    "registrant": "registrant_name",
+    "registrant_name": null,
+    "registrar": "registrar",
+    "emails": null,
+    "creation_date": "creation_date",
+    "expiration_date": "registry_expiry_date",
+    "updated_date": "updated_date",
+    "name_servers": "name_server",
+    "status": "domain_status"
+  }
+}
