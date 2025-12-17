@@ -8,6 +8,7 @@ from ...whoare.service.service import WhoareService
 from ..known_brands_service import guess_brand_from_whois
 from ..omit_words_service import get_all_omit_words
 from ..ascii_cctld_service import get_fallback_by_id
+from ..ascii_geotld_service import get_country_by_id
 import logging
 
 logger = logging.getLogger(__name__)
@@ -161,8 +162,8 @@ async def get_domain_owner(domain: str) -> str:
         root_domain = domain
 
     whoare_doc = await WhoareService.whoare(root_domain)
-    # DIVERSIFICACION
 
+    # DIVERSIFICACION:
     # gTLDs
     if whoare_doc and whoare_doc.get("gTLD") == "true":
         # Validar privacidad del owner
@@ -185,9 +186,8 @@ async def get_domain_owner(domain: str) -> str:
         # Si no hay owner, fallback a .country_code
         if not registrant_org and not registrant_name:
             country = whoare_doc.get("country").lower()
-            fallback_domain = f"{ext.domain}.{country}".lower()
+            fallback_domain = f"{ext.domain}.{country.strip()}".lower()
             registrant = await get_domain_owner(fallback_domain)
-
             return registrant
         else:
             if registrant_org:
@@ -205,42 +205,58 @@ async def get_domain_owner(domain: str) -> str:
         registrant_name_candidate = fields.get("registrant_name")
 
         registrant = None
+        registrant_name = None
         if registrant_candidate and not _is_privacy_value(registrant_candidate):
             registrant = registrant_candidate
-        registrant_name = None
         if registrant_name_candidate and not _is_privacy_value(registrant_name_candidate):
             registrant_name = registrant_name_candidate
-
+        
         # fallback
         if not registrant and not registrant_name:
             tld = ext.suffix.split('.')[-1]
+            geoTLD = whoare_doc.get("geoTLD")
 
-            # pseudo gTLD 1st fallback
-            country = whoare_doc.get("country")
-            if country:
-                code, state, city = country
-                if code:
-                    fallback_domain = f"{ext.domain}.{code.strip()}".lower()
-
+            # if it's a geoTLD
+            if geoTLD:
+                # PRODUCCION:
+                country = get_country_by_id(tld)
+                # DESARROLLO
+                #country = get_country_by_id(tld, _get_client())
+                if country:
+                    fallback_domain = f"{ext.domain}.{country.strip()}".lower()
                     registrant = await get_domain_owner(fallback_domain)
                     if registrant:
                         return registrant
+                return None
 
-            # DESAROLLO:
-            # fallback = get_fallback_by_id(tld, _get_client())
-            fallback = get_fallback_by_id(tld)
-            fallback_domain = None
-            if fallback:
-                for cc in fallback:
-                    fallback_domain = f"{ext.domain}.{cc}".lower()
-                    registrant = await get_domain_owner(fallback_domain)
-
-                    if registrant:
-                        break
             else:
-                return None  
-            
-            return registrant
+                # pseudo gTLD 1st fallback
+                country = whoare_doc.get("country")
+                if country:
+                    code, state, city = country
+                    if code:
+                        fallback_domain = f"{ext.domain}.{code.strip()}".lower()
+
+                        registrant = await get_domain_owner(fallback_domain)
+                        if registrant:
+                            return registrant
+
+                # PRODUCCION:
+                fallback = get_fallback_by_id(tld)
+                # DESAROLLO:
+                #fallback = get_fallback_by_id(tld, _get_client())
+                fallback_domain = None
+                if fallback:
+                    for cc in fallback:
+                        fallback_domain = f"{ext.domain}.{cc}".lower()
+                        registrant = await get_domain_owner(fallback_domain)
+
+                        if registrant:
+                            break
+                else:
+                    return None  
+                
+                return registrant
 
         else:
             if registrant:
@@ -253,7 +269,7 @@ async def get_domain_owner(domain: str) -> str:
     return None
 
 
-def _get_client() -> OpenSearch:
+"""def _get_client() -> OpenSearch:
         return OpenSearch(
             hosts=[{"host": "localhost", "port": "9200"}],
             http_compress=True,
@@ -262,4 +278,4 @@ def _get_client() -> OpenSearch:
             ssl_show_warn=False,
         )
 if __name__ == "__main__":
-    print(asyncio.run(get_domain_owner("bancosantander.com")))
+    print(asyncio.run(get_domain_owner("athletic-club.eus")))"""

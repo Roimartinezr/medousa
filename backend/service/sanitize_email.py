@@ -51,7 +51,6 @@ def _owners_token_overlap(a: str, b: str) -> float:
     # si todos los tokens del más corto están contenidos en el otro → 1.0
     return len(inter) / float(min_len)
 
-
 def _owners_similarity(a: str, b: str) -> float:
     """Devuelve similitud [0–1] usando Levenshtein normalizado."""
     a_n = _norm_owner(a).replace(" ", "")
@@ -180,8 +179,7 @@ async def sanitize_mail(email):
     logical_suffix = ext.suffix or ""
     if logical_suffix:
         # si el suffix es compuesto (com.es, net.es...), nos quedamos con la última parte (es)
-        logical_suffix_parts = logical_suffix.split(".")
-        logical_suffix = logical_suffix_parts[-1]
+        logical_suffix = logical_suffix.split(".")[-1]
 
     # 3.2 Root domain LÓGICO (canonical) usando el suffix lógico
     if base_company and logical_suffix:
