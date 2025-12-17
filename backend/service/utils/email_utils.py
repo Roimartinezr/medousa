@@ -214,10 +214,22 @@ async def get_domain_owner(domain: str) -> str:
         # fallback
         if not registrant and not registrant_name:
             tld = ext.suffix.split('.')[-1]
+
+            # pseudo gTLD 1st fallback
+            country = whoare_doc.get("country")
+            if country:
+                code, state, city = country
+                if code:
+                    fallback_domain = f"{ext.domain}.{code.strip()}".lower()
+
+                    registrant = await get_domain_owner(fallback_domain)
+                    if registrant:
+                        return registrant
+
             # DESAROLLO:
             # fallback = get_fallback_by_id(tld, _get_client())
             fallback = get_fallback_by_id(tld)
-            
+            fallback_domain = None
             if fallback:
                 for cc in fallback:
                     fallback_domain = f"{ext.domain}.{cc}".lower()
