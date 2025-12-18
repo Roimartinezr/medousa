@@ -3,11 +3,11 @@ import asyncio
 from typing import Dict
 from email_validator import validate_email, caching_resolver, EmailNotValidError
 import tldextract
-from ...whoare.service.service import WhoareService
-from ..known_brands_service import guess_brand_from_whois
-from ..omit_words_service import get_all_omit_words
-from ..ascii_cctld_service import get_fallback_by_id
-from ..ascii_geotld_service import get_country_by_id
+from whoare.service.service import WhoareService
+from service.known_brands_service import guess_brand_from_whois
+from service.omit_words_service import get_all_omit_words
+from service.ascii_cctld_service import get_fallback_by_id
+from service.ascii_geotld_service import get_country_by_id
 import logging
 
 logger = logging.getLogger(__name__)
@@ -16,7 +16,10 @@ logger.setLevel(logging.DEBUG)
 OMIT_WORDS_CACHE = set()
 OMIT_WORDS_LOADED = False
 
-def _load_omit_words_cache():
+# PRODUCCION / DESARROLLO
+DEV = False
+
+def _load_omit_words_cache(dev = DEV):
     """
     Carga las omit_words desde OpenSearch solo una vez.
     Si no se puede conectar, deja el set vacío y no rompe el arranque.
@@ -26,7 +29,7 @@ def _load_omit_words_cache():
         return
 
     try:
-        words = get_all_omit_words()
+        words = get_all_omit_words(dev=dev)
         OMIT_WORDS_CACHE = set(words)
         OMIT_WORDS_LOADED = True
     except Exception as e:
@@ -35,9 +38,9 @@ def _load_omit_words_cache():
         OMIT_WORDS_CACHE = set()
         OMIT_WORDS_LOADED = True  # marcamos como "intentado" para no buclear
 
-def _is_omit_word(word: str) -> bool:
+def _is_omit_word(word: str, dev = DEV) -> bool:
     if not OMIT_WORDS_LOADED:
-        _load_omit_words_cache()
+        _load_omit_words_cache(dev)
     return word in OMIT_WORDS_CACHE
 
 def _is_privacy_value(word: str) -> bool:
@@ -72,7 +75,7 @@ def extract_domain_from_email(email):
     except IndexError:
         return None
 
-def extract_company_from_domain(domain: str) -> Dict:
+def extract_company_from_domain(domain: str, dev=DEV) -> Dict:
     """
     Intenta identificar una empresa basándose en el dominio usando:
     - tokenización (incluyendo guiones)
@@ -98,7 +101,7 @@ def extract_company_from_domain(domain: str) -> Dict:
         _split_tokens(ext.domain)
 
     # limpiar omit words (mail, info, emailing, etc.)
-    filtered = [t for t in tokens if not _is_omit_word(t)]
+    filtered = [t for t in tokens if not _is_omit_word(t, dev=dev)]
 
     # si después de filtrar no queda nada, usamos el dominio base sin sufijos tipo "-mail"
     if not filtered:
@@ -116,21 +119,18 @@ def extract_company_from_domain(domain: str) -> Dict:
 
     # Fuzzy match contra las brands en OpenSearch (owner_terms + brand_keywords)
     try:
-        candidates = guess_brand_from_whois(candidate_str)
+        candidates = guess_brand_from_whois(owner_str=candidate_str, dev=dev)
     except Exception:
         candidates = []
 
+    print(candidates)
     if candidates:
         best = candidates[0]
         brand_id = best["_id"]
         score = best["_score"]
         confidence = min(1.0, score / 10.0)   # normalización arbitraria
     else:
-        # sin match en OpenSearch: usamos el último token
-        if filtered:
-            brand_id = filtered[-1]
-        else:
-            brand_id = ext.domain or domain
+        brand_id = ext.domain or domain
         confidence = 0.0
 
     return {
@@ -142,7 +142,7 @@ def extract_company_from_domain(domain: str) -> Dict:
 
 # ========================= DOMAIN LEGITMACY ===========================
 
-async def get_domain_owner(domain: str) -> str:
+async def get_domain_owner(domain: str, dev = DEV) -> str:
     """
     Devuelve el titular del dominio.
     """
@@ -160,7 +160,7 @@ async def get_domain_owner(domain: str) -> str:
     else:
         root_domain = domain
 
-    whoare_doc = await WhoareService.whoare(root_domain)
+    whoare_doc = await WhoareService.whoare(root_domain, dev=dev)
 
     # DIVERSIFICACION:
     # gTLDs
@@ -186,7 +186,7 @@ async def get_domain_owner(domain: str) -> str:
         if not registrant_org and not registrant_name:
             country = whoare_doc.get("country").lower()
             fallback_domain = f"{ext.domain}.{country.strip()}".lower()
-            registrant = await get_domain_owner(fallback_domain)
+            registrant = await get_domain_owner(fallback_domain, dev=dev)
             return registrant
         else:
             if registrant_org:
@@ -217,13 +217,10 @@ async def get_domain_owner(domain: str) -> str:
 
             # if it's a geoTLD
             if geoTLD:
-                # PRODUCCION:
-                country = get_country_by_id(tld)
-                # DESARROLLO
-                #country = get_country_by_id(tld, dev=True)
+                country = get_country_by_id(tld, dev=dev)
                 if country:
                     fallback_domain = f"{ext.domain}.{country.strip()}".lower()
-                    registrant = await get_domain_owner(fallback_domain)
+                    registrant = await get_domain_owner(fallback_domain, dev=dev)
                     if registrant:
                         return registrant
                 return None
@@ -236,19 +233,16 @@ async def get_domain_owner(domain: str) -> str:
                     if code:
                         fallback_domain = f"{ext.domain}.{code.strip()}".lower()
 
-                        registrant = await get_domain_owner(fallback_domain)
+                        registrant = await get_domain_owner(fallback_domain, dev=dev)
                         if registrant:
                             return registrant
 
-                # PRODUCCION:
-                fallback = get_fallback_by_id(tld)
-                # DESARROLLO:
-                #fallback = get_fallback_by_id(tld, dev=True)
+                fallback = get_fallback_by_id(tld, dev=dev)
                 fallback_domain = None
                 if fallback:
                     for cc in fallback:
                         fallback_domain = f"{ext.domain}.{cc}".lower()
-                        registrant = await get_domain_owner(fallback_domain)
+                        registrant = await get_domain_owner(fallback_domain, dev=dev)
 
                         if registrant:
                             break
@@ -268,6 +262,6 @@ async def get_domain_owner(domain: str) -> str:
     return None
 
 
-"""
 if __name__ == "__main__":
-    print(asyncio.run(get_domain_owner("athletic-club.eus")))"""
+    #print(asyncio.run(get_domain_owner("athletic-club.eus")))
+    print(extract_company_from_domain("athletic-club.eus"))

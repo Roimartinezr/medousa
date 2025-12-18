@@ -14,7 +14,7 @@ def get_all_idn_cctld_ids(dev = False) -> List[str]:
     if dev:
         client = __get_client()
     else:
-        from ..opensearch_client import get_opensearch_client
+        from opensearch_client import get_opensearch_client
         client: OpenSearch = get_opensearch_client()
 
     # Verificamos existencia para evitar error 404 si el índice aún no se creó
@@ -44,7 +44,7 @@ def get_idn_cctld_by_id(tld: str, dev = False) -> Optional[Dict[str, Any]]:
     if dev:
         client = __get_client()
     else:
-        from ..opensearch_client import get_opensearch_client
+        from opensearch_client import get_opensearch_client
         client: OpenSearch = get_opensearch_client()
 
     try:

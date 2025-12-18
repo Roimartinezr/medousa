@@ -3,10 +3,18 @@
 from typing import List, Optional, Dict
 
 from opensearchpy import OpenSearch, helpers
-from ..opensearch_client import get_opensearch_client
+from opensearch_client import get_opensearch_client
 
 INDEX_MAIL_NAMES = "mail_names"
 
+def __get_client() -> OpenSearch:
+        return OpenSearch(
+            hosts=[{"host": "localhost", "port": "9200"}],
+            http_compress=True,
+            use_ssl=False,
+            verify_certs=False,
+            ssl_show_warn=False,
+        )
 
 def ensure_mail_names_index() -> None:
     """
@@ -14,7 +22,7 @@ def ensure_mail_names_index() -> None:
     Guarda proveedores personales tipo gmail.com, outlook.com, etc.
     """
     client: OpenSearch = get_opensearch_client()
-    if client.indices.exists(INDEX_MAIL_NAMES):
+    if client.indices.exists(index=INDEX_MAIL_NAMES):
         return
 
     body = {
@@ -82,11 +90,15 @@ def bulk_seed_mail_names(domains: List[str]) -> None:
         helpers.bulk(client, actions)
 
 
-def get_mail_name(domain: str) -> Optional[Dict]:
+def get_mail_name(domain: str, dev = False) -> Optional[Dict]:
     """
     Devuelve el documento de mail_names para ese dominio (si existe).
     """
-    client = get_opensearch_client()
+    if dev:
+        client = __get_client()
+    else:
+        client = get_opensearch_client()
+
     resp = client.search(
         index=INDEX_MAIL_NAMES,
         body={
@@ -100,8 +112,8 @@ def get_mail_name(domain: str) -> Optional[Dict]:
     return hits[0] if hits else None
 
 
-def is_personal_mail_domain(domain: str) -> bool:
+def is_personal_mail_domain(domain: str, dev = False) -> bool:
     """
     True si el dominio es un proveedor personal (gmail, outlook, etc.).
     """
-    return get_mail_name(domain) is not None
+    return get_mail_name(domain, dev=dev) is not None

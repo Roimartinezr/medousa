@@ -3,10 +3,18 @@
 from typing import List, Optional
 from opensearchpy import OpenSearch, helpers
 
-from ..opensearch_client import get_opensearch_client
+from opensearch_client import get_opensearch_client
 
 INDEX_OMIT_WORDS = "omit_words"
 
+def __get_client() -> OpenSearch:
+        return OpenSearch(
+            hosts=[{"host": "localhost", "port": "9200"}],
+            http_compress=True,
+            use_ssl=False,
+            verify_certs=False,
+            ssl_show_warn=False,
+        )
 
 def ensure_omit_words_index() -> None:
     """
@@ -14,7 +22,7 @@ def ensure_omit_words_index() -> None:
     Guarda palabras que se deben ignorar al extraer la company del dominio.
     """
     client: OpenSearch = get_opensearch_client()
-    if client.indices.exists(INDEX_OMIT_WORDS):
+    if client.indices.exists(index=INDEX_OMIT_WORDS):
         return
 
     body = {
@@ -40,9 +48,9 @@ def ensure_omit_words_index() -> None:
 
 
 def upsert_omit_word(word: str,
-                     lang: Optional[str] = None,
-                     scope: Optional[str] = None,
-                     active: bool = True) -> None:
+                    lang: Optional[str] = None,
+                    scope: Optional[str] = None,
+                    active: bool = True) -> None:
     """
     Crea o actualiza una palabra omitible.
     Usa la propia palabra como _id para no duplicar.
@@ -86,11 +94,15 @@ def bulk_seed_omit_words(words: List[str]) -> None:
     helpers.bulk(client, actions)
 
 
-def get_all_omit_words(active_only: bool = True) -> List[str]:
+def get_all_omit_words(active_only: bool = True, dev = False) -> List[str]:
     """
     Devuelve todas las palabras omitibles (por defecto solo las activas).
     """
-    client = get_opensearch_client()
+
+    if dev:
+        client = __get_client()
+    else:
+        client = get_opensearch_client()
 
     query: dict
     if active_only:

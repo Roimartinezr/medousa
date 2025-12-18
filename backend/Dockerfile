@@ -16,5 +16,5 @@ COPY . .
 # Expone el puerto interno
 EXPOSE 8000
 
-# Lanza el servidor con waitress
-CMD ["waitress-serve", "--port=8000", "--host=0.0.0.0", "app:app"]
+# Lanza el servidor uvicorn
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

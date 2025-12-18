@@ -14,7 +14,7 @@ def get_all_ascii_geotld_ids(dev = False) -> List[str]:
     if dev:
         client = __get_client()
     else:
-        from ..opensearch_client import get_opensearch_client
+        from opensearch_client import get_opensearch_client
         client: OpenSearch = get_opensearch_client()
 
     # Verificamos existencia para evitar error 404
@@ -44,7 +44,7 @@ def get_ascii_geotld_by_id(tld: str, dev = False) -> Optional[Dict[str, Any]]:
     if dev:
         client = __get_client()
     else:
-        from ..opensearch_client import get_opensearch_client
+        from opensearch_client import get_opensearch_client
         client: OpenSearch = get_opensearch_client()
 
     try:
@@ -63,7 +63,7 @@ def get_country_by_id(tld: str, dev = False) -> Optional[str]:
     if dev:
         client = __get_client()
     else:
-        from ..opensearch_client import get_opensearch_client
+        from opensearch_client import get_opensearch_client
         client: OpenSearch = get_opensearch_client()
 
     try:

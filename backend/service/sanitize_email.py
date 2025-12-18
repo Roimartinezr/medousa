@@ -13,6 +13,9 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+# PRODUCCION / DESARROLLO
+DEV = False
+
 # ------------------ Helpers ---------------------
 def _norm_owner(s: str) -> str:
     if not s:
@@ -146,7 +149,7 @@ async def sanitize_mail(email):
         }
 
     # 2.1 Proveedor generalista (mail_names en OpenSearch)
-    if is_personal_mail_domain(incoming_domain):
+    if is_personal_mail_domain(incoming_domain, dev=DEV):
         return {
             "request_id": str(uuid.uuid4()),
             "email": email,
@@ -172,7 +175,7 @@ async def sanitize_mail(email):
         dns_root_domain = incoming_domain
 
     # 3.1 Heurística para sacar "company base" (usa omit_words y OpenSearch)
-    domain_info = extract_company_from_domain(incoming_domain)
+    domain_info = extract_company_from_domain(incoming_domain, dev=DEV)
     base_company = domain_info["company"]  # ej: "bancosantander"
 
     # --- NUEVO: suffix lógico para la brand ---
@@ -201,10 +204,10 @@ async def sanitize_mail(email):
     owner_terms = ""
 
     # 3.3 Primero: comprobar si el dominio entrante YA es conocido
-    brand_doc = find_brand_by_known_domain(incoming_domain) # xxxGestionar aquí sensibilidad dominio/subdominio
+    brand_doc = find_brand_by_known_domain(incoming_domain, dev=DEV) # xxxGestionar aquí sensibilidad dominio/subdominio
     if not brand_doc and dns_root_domain != incoming_domain:
         # también probamos contra el root DNS real (bancosantander-mail.es)
-        brand_doc = find_brand_by_known_domain(dns_root_domain)
+        brand_doc = find_brand_by_known_domain(dns_root_domain, dev=DEV)
 
     # Seguridad extra: si el dominio que buscamos NO está realmente en known_domains,
     # descartamos el brand_doc (por si OpenSearch devolviese algo raro).
@@ -238,7 +241,7 @@ async def sanitize_mail(email):
 
     else:
         # 3.4 Mirar si ya tenemos brand por keywords (root lógico)
-        brand_doc = find_brand_by_keywords(ext.domain)
+        brand_doc = find_brand_by_keywords(ext.domain, dev=DEV)
         if brand_doc:
             src = brand_doc["_source"]
             brand_id = brand_doc["_id"]
@@ -258,12 +261,12 @@ async def sanitize_mail(email):
             new_brand = True
             # 3.5 No existe brand aún en OpenSearch para este root_domain lógico
             # Aquí SÍ hacemos WHOIS del root_domain lógico (bancosantander.es)
-            root_owner = await get_domain_owner(root_domain)
+            root_owner = await get_domain_owner(root_domain, dev=DEV)
             t = 0.5
             c = 0
             while root_owner == "No encontrado" and c < 2:
                 await asyncio.sleep(1+t)
-                root_owner = await get_domain_owner(root_domain)
+                root_owner = await get_domain_owner(root_domain, dev=DEV)
                 c += 1
 
             if root_owner != "No encontrado":
@@ -271,13 +274,20 @@ async def sanitize_mail(email):
                     root_domain=root_domain,
                     owner_str=root_owner,
                     brand_id_hint=base_company or None,
+                    dev=DEV
                 )
                 company_detected = brand_id or company_detected
                 brand_known_domains = {root_domain}
                 owner_terms = root_owner  # <-- usamos el WHOIS como owner_terms inicial
-                brand_profile = " ".join(dict.fromkeys([root_owner, brand_id or ""]))
+                # Evitar TypeError: juntar None en join → filtrar y normalizar valores
+                pieces = []
+                if root_owner:
+                    pieces.append(str(root_owner).strip())
+                if brand_id:
+                    pieces.append(str(brand_id).strip())
+                brand_profile = " ".join(dict.fromkeys(pieces))
                 try:
-                    add_known_domain(brand_id, root_domain)
+                    add_known_domain(brand_id, root_domain, dev=DEV)
                 except Exception:
                     pass
             else:
@@ -300,12 +310,12 @@ async def sanitize_mail(email):
             incoming_owner = "Dominio Previamente Autorizado"
     else:
         # Caso 2: no está en known_domains ⇒ hacemos WHOIS del root DNS real
-        incoming_owner = await get_domain_owner(dns_root_domain)
+        incoming_owner = await get_domain_owner(dns_root_domain, dev=DEV)
         t = 0.5
         c = 0
         while incoming_owner == "No encontrado" and c < 2:
             await asyncio.sleep(1+t)
-            incoming_owner = await get_domain_owner(dns_root_domain)
+            incoming_owner = await get_domain_owner(dns_root_domain, dev=DEV)
             c+=1
 
         owners_match = False
@@ -323,10 +333,10 @@ async def sanitize_mail(email):
                 try:
                     if ext.subdomain and brand_id:
                         dns_root_subdomain = f'{ext.subdomain}.{dns_root_domain}'
-                        add_known_domain(brand_id, dns_root_subdomain)
-                    add_known_domain(brand_id, dns_root_domain)
-                    add_owner_terms(brand_id, incoming_owner)
-                    add_keyword(brand_id, ext.domain)
+                        add_known_domain(brand_id, dns_root_subdomain, dev=DEV)
+                    add_known_domain(brand_id, dns_root_domain, dev=DEV)
+                    add_owner_terms(brand_id, incoming_owner, dev=DEV)
+                    add_keyword(brand_id, ext.domain, dev=DEV)
                     brand_known_domains.add(dns_root_domain)
                 except Exception:
                     pass
@@ -337,7 +347,7 @@ async def sanitize_mail(email):
     # ======================================================
     subdomain_added = False
     if ext.subdomain and brand_id:
-        add_known_domain(brand_id, incoming_domain)
+        add_known_domain(brand_id, incoming_domain, dev=DEV)
         subdomain_added = True
 
     root_dom_norm = _norm_domain(root_domain)           # bancosantander.es
@@ -347,7 +357,7 @@ async def sanitize_mail(email):
         relation = 1  # mismo dominio base
     elif incoming_dom_norm and _is_subdomain(incoming_dom_norm, root_dom_norm):
         if not subdomain_added and brand_id:
-            add_known_domain(brand_id, incoming_domain)
+            add_known_domain(brand_id, incoming_domain, dev=DEV)
         relation = 2  # subdominio del dominio lógico/canónico
     else:
         relation = 0  # dominio ajeno (respecto al canonical)
@@ -459,3 +469,6 @@ async def sanitize_mail(email):
         "labels": labels,
         "evidences": evidences,
     }
+
+if __name__ == "__main__":
+    print(asyncio.run(sanitize_mail("test@athletic-club.eus")))

@@ -4,10 +4,19 @@ from typing import List, Dict, Optional
 import re
 
 from opensearchpy import OpenSearch, NotFoundError
-from ..opensearch_client import get_opensearch_client
+from opensearch_client import get_opensearch_client
 import tldextract
 
 INDEX_KNOWN_BRANDS = "known_brands"
+
+def __get_client() -> OpenSearch:
+        return OpenSearch(
+            hosts=[{"host": "localhost", "port": "9200"}],
+            http_compress=True,
+            use_ssl=False,
+            verify_certs=False,
+            ssl_show_warn=False,
+        )
 
 
 # ---------------------------------------------------------
@@ -49,7 +58,7 @@ def ensure_known_brands_index() -> None:
     }
     """
     client: OpenSearch = get_opensearch_client()
-    if client.indices.exists(INDEX_KNOWN_BRANDS):
+    if client.indices.exists(index=INDEX_KNOWN_BRANDS):
         return
 
     body = {
@@ -101,6 +110,7 @@ def upsert_brand(
     keywords: List[str],
     owner_terms: Optional[str] = "",
     known_domains: Optional[List[str]] = None,
+    dev = False
 ) -> None:
     """
     Crea o actualiza una brand completa con el NUEVO formato.
@@ -114,7 +124,10 @@ def upsert_brand(
       "known_domains": [...]
     }
     """
-    client = get_opensearch_client()
+    if dev:
+        client = __get_client()
+    else:
+        client = get_opensearch_client()
 
     doc_id = brand_id  # usamos brand_id como _id lógico
 
@@ -132,11 +145,14 @@ def upsert_brand(
 # Añadir dominio conocido
 # ---------------------------------------------------------
 
-def add_known_domain(brand_id: str, domain: str) -> None:
+def add_known_domain(brand_id: str, domain: str, dev = False) -> None:
     """
     Añade un dominio al array known_domains si no existe.
     """
-    client = get_opensearch_client()
+    if dev:
+        client = __get_client()
+    else:
+        client = get_opensearch_client()
 
     client.update(
         index=INDEX_KNOWN_BRANDS,
@@ -158,11 +174,14 @@ def add_known_domain(brand_id: str, domain: str) -> None:
     )
 
 
-def add_keyword(brand_id: str, keyword: str) -> None:
+def add_keyword(brand_id: str, keyword: str, dev = False) -> None:
     """
     Añade un token al array keywords si no existe.
     """
-    client = get_opensearch_client()
+    if dev:
+        client = __get_client()
+    else:
+        client = get_opensearch_client()
 
     client.update(
         index=INDEX_KNOWN_BRANDS,
@@ -188,12 +207,15 @@ def add_keyword(brand_id: str, keyword: str) -> None:
 # Añadir owner_terms
 # ---------------------------------------------------------
 
-def add_owner_terms(brand_id: str, owner_str: str) -> None:
+def add_owner_terms(brand_id: str, owner_str: str, dev = False) -> None:
     """
     Añade tokens de WHOIS al campo owner_terms SIN duplicados.
     owner_terms es la “bolsa de términos” que nutre el fuzzy.
     """
-    client = get_opensearch_client()
+    if dev:
+        client = __get_client()
+    else:
+        client = get_opensearch_client()
 
     # tokens nuevos (normalizados) que vienen del WHOIS actual
     new_tokens = tokenize_owner_str(owner_str)
@@ -238,15 +260,21 @@ def add_owner_terms(brand_id: str, owner_str: str) -> None:
 # Fuzzy match WHOIS -> brand
 # ---------------------------------------------------------
 
-def guess_brand_from_whois(owner_str: str, max_results: int = 3) -> List[Dict]:
+def guess_brand_from_whois(owner_str: str, max_results: int = 3, dev = False) -> List[Dict]:
     """
     Devuelve las marcas más probables en función del WHOIS owner.
     Pondera fuertemente 'keywords' y, si hay suficiente texto, también 'owner_terms'.
     """
-    client = get_opensearch_client()
+
+    if dev:
+        client = __get_client()
+    else:
+        client = get_opensearch_client()
+    
     owner_str = (owner_str or "").strip()
     if not owner_str:
         return []
+    print(owner_str)
 
     tokens = owner_str.split()
 
@@ -291,12 +319,15 @@ def guess_brand_from_whois(owner_str: str, max_results: int = 3) -> List[Dict]:
 # Consulta directa por dominio conocido
 # ---------------------------------------------------------
 
-def find_brand_by_known_domain(domain: str) -> Optional[Dict]:
+def find_brand_by_known_domain(domain: str, dev = False) -> Optional[Dict]:
     """
     ¿Este dominio ya pertenece a alguna brand?
     Búsqueda por coincidencia EXACTA sobre known_domains (keyword).
     """
-    client = get_opensearch_client()
+    if dev:
+        client = __get_client()
+    else:
+        client = get_opensearch_client()
 
     # normalizamos un poco el dominio de entrada
     domain = (domain or "").strip().lower().rstrip(".")
@@ -319,12 +350,16 @@ def find_brand_by_known_domain(domain: str) -> Optional[Dict]:
     return hits[0] if hits else None
 
 
-def find_brand_by_keywords(domain: str) -> Optional[Dict]:
+def find_brand_by_keywords(domain: str, dev = False) -> Optional[Dict]:
     """
     Busca una brand cuyo campo 'keywords' tenga similitud con el dominio.
     Devuelve el documento completo si hay coincidencias.
     """
-    client = get_opensearch_client()
+    if dev:
+        client = __get_client()
+    else:
+        client = get_opensearch_client()
+
     resp = client.search(
         index=INDEX_KNOWN_BRANDS,
         body={
@@ -353,13 +388,18 @@ def ensure_brand_for_root_domain(
     root_domain: str,
     owner_str: str,
     brand_id_hint: Optional[str] = None,
+    dev = False
 ) -> str:
     """
     Garantiza que exista una brand para root_domain.
     - Si la brand NO existe → la crea (con root_domain en known_domains).
     - Si la brand YA existe → solo enriquece: known_domains + owner_terms.
     """
-    client = get_opensearch_client()
+    if dev:
+        client = __get_client()
+    else:
+        client = get_opensearch_client()
+
     ext = tldextract.extract(root_domain)
 
     base = brand_id_hint or ext.domain or root_domain
@@ -369,8 +409,8 @@ def ensure_brand_for_root_domain(
     try:
         client.get(index=INDEX_KNOWN_BRANDS, id=brand_id)
         # ➜ Brand existente: solo nutrimos, no tocamos country_code
-        add_known_domain(brand_id, root_domain)
-        add_owner_terms(brand_id, owner_str)
+        add_known_domain(brand_id, root_domain, dev=dev)
+        add_owner_terms(brand_id, owner_str, dev=dev)
         return brand_id
 
     except NotFoundError:
@@ -393,6 +433,7 @@ def ensure_brand_for_root_domain(
             keywords=keywords,
             owner_terms=owner_terms,
             known_domains=[root_domain],
+            dev=dev
         )
 
         return brand_id

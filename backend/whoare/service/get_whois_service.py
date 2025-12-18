@@ -10,10 +10,10 @@ import asyncio
 from datetime import datetime
 from typing import Optional
 from jsonschema import validate, ValidationError
-from ...service.ascii_cctld_service import get_ascii_cctld_by_id
-from ...service.idn_cctld_service import get_idn_cctld_by_id
-from ...service.ascii_geotld_service import get_ascii_geotld_by_id
-from ..scrap.whois_socket import whois_query
+from service.ascii_cctld_service import get_ascii_cctld_by_id
+from service.idn_cctld_service import get_idn_cctld_by_id
+from service.ascii_geotld_service import get_ascii_geotld_by_id
+from whoare.scrap.whois_socket import whois_query
 
 # --- Configuración Global de Logging ---
 # Esto asegura que los logs de whois_socket y los scrapers dinámicos se vean en consola.
@@ -25,6 +25,9 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+# PRODUCCION / DESARROLLO
+DEV = False
 
 DATE_KEYS = {"creation_date", "expiration_date", "updated_date"}
 UA_MULTI_VALUE_TLD = "ua"
@@ -71,7 +74,7 @@ def _normalize_value(value):
     if isinstance(value, datetime): return value.isoformat()
     return value
 
-async def get_whois_cctld(domain: str, geoTLD = False):
+async def get_whois_cctld(domain: str, geoTLD = False, dev = DEV):
     # estract tld from domain
     ext = tldextract.extract(domain)
     tld = ext.suffix.split('.')[-1]
@@ -96,20 +99,11 @@ async def get_whois_cctld(domain: str, geoTLD = False):
 
     # get tld BD's data
     if geoTLD:
-        # PRODUCCION
-        src = get_ascii_geotld_by_id(tld)
-        # DESARROLLO
-        #src = get_ascii_geotld_by_id(tld, dev=True)
+        src = get_ascii_geotld_by_id(tld, dev=dev)
     elif idn:
-        # PRODUCCION
-        src = get_idn_cctld_by_id(tld)
-        # DESARROLLO
-        #src = get_idn_cctld_by_id(tld, dev=True)
+        src = get_idn_cctld_by_id(tld, dev=dev)
     else:
-        # PRODUCCION
-        src = get_ascii_cctld_by_id(tld)
-        # DESARROLLO
-        #src = get_ascii_cctld_by_id(tld, dev=True)
+        src = get_ascii_cctld_by_id(tld, dev=dev)
 
     scraping_site = src.get("scraping_site", "") or ""
 
@@ -120,14 +114,14 @@ async def get_whois_cctld(domain: str, geoTLD = False):
         w = whois.whois(domain)
     elif scraping_site.startswith("whois."):
         # Activar logs específicamente para el socket
-        logging.getLogger("backend.scrap.whois_socket").setLevel(logging.DEBUG)
+        logging.getLogger("whoare.scrap.whois_socket").setLevel(logging.DEBUG)
         w = whois_query(domain=domain, server=scraping_site)
     else:
         if not scraping_site:
             raise NotImplemented(f"[scrap] no scraping site detected for TLD '{tld}'")
         # scrap dinámico desde scrap/<scraping_site>.py
         try:
-            mod_name = f"backend.whoare.scrap.{scraping_site}"
+            mod_name = f"whoare.scrap.{scraping_site}"
             
             # Forzar nivel DEBUG para el módulo que vamos a importar
             # Esto asegura que veamos prints/logs internos de ese script específico
