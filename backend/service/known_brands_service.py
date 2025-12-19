@@ -3,6 +3,7 @@
 from typing import List, Dict, Optional
 import re
 
+import tldextract
 from opensearchpy import OpenSearch, NotFoundError
 from opensearch_client import get_opensearch_client
 import tldextract
@@ -274,7 +275,6 @@ def guess_brand_from_whois(owner_str: str, max_results: int = 3, dev = False) ->
     owner_str = (owner_str or "").strip()
     if not owner_str:
         return []
-    print(owner_str)
 
     tokens = owner_str.split()
 
@@ -381,7 +381,7 @@ def find_brand_by_keywords(domain: str, dev = False) -> Optional[Dict]:
 def _normalize_brand_id(s: str) -> str:
     s = (s or "").strip().lower()
     # nos quedamos solo con letras y números
-    return re.sub(r"[^a-z0-9]+", "", s)
+    return re.sub(r"[^a-z0-9-]+", "", s)
 
 
 def ensure_brand_for_root_domain(
@@ -421,11 +421,11 @@ def ensure_brand_for_root_domain(
         if len(country_code) != 2:
             country_code = ""
 
-        tokens = tokenize_owner_str(owner_str)
-        owner_terms = " ".join(tokens)
-
-        # Keywords por defecto: el brand_id/base
-        keywords = [brand_id]
+        owner_tokens = tokenize_owner_str(owner_str)
+        owner_terms = " ".join(owner_tokens)
+        
+        domain = tldextract.extract(root_domain).domain
+        keywords = tokenize_owner_str(domain)
 
         upsert_brand(
             brand_id=brand_id,
@@ -437,3 +437,6 @@ def ensure_brand_for_root_domain(
         )
 
         return brand_id
+
+if __name__ == "__main__":
+    print(ensure_brand_for_root_domain("athletic-club.eus", "Athletic Club de Bilbao S.A.D.", dev=True))

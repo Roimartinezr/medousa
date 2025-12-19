@@ -1,5 +1,6 @@
 # app/backend/service/utils/email_utils.py
 import asyncio
+import re
 from typing import Dict
 from email_validator import validate_email, caching_resolver, EmailNotValidError
 import tldextract
@@ -103,11 +104,11 @@ def extract_company_from_domain(domain: str, dev=DEV) -> Dict:
     # limpiar omit words (mail, info, emailing, etc.)
     filtered = [t for t in tokens if not _is_omit_word(t, dev=dev)]
 
-    # si después de filtrar no queda nada, usamos el dominio base sin sufijos tipo "-mail"
+    # si después de filtrar no queda nada, usamos el dominio base"
     if not filtered:
         base = ext.domain or ""
         if "-" in base:
-            base = base.split("-")[0]
+            base = re.split(r'[- ]', base)
         base = base.strip().lower()
         filtered = [base] if base else []
 
@@ -123,7 +124,6 @@ def extract_company_from_domain(domain: str, dev=DEV) -> Dict:
     except Exception:
         candidates = []
 
-    print(candidates)
     if candidates:
         best = candidates[0]
         brand_id = best["_id"]
