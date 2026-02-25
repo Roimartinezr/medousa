@@ -115,7 +115,7 @@ frontend/
 
 #### 1. Clone the Repository
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/Roimartinezr/medousa
 cd medousa
 ```
 #### 2. Start Infrastructure with Docker Compose
