@@ -5,7 +5,9 @@ from typing import List, Dict, Optional
 import Levenshtein
 import tldextract
 from opensearchpy import OpenSearch, NotFoundError
-#from opensearch_client import get_opensearch_client 
+from opensearch_client import get_opensearch_client 
+
+DEV = False
 
 INDEX_KNOWN_BRANDS = "known_brands_v3"
 
@@ -180,6 +182,36 @@ def _backup_fuzzy_match(client, clean_input):
         "match_type": "similarity"
     }
 
+def find_brand_by_known_domain(domain: str, dev = DEV) -> Optional[Dict]:
+    """
+    ¿Este dominio ya pertenece a alguna brand?
+    Búsqueda por coincidencia EXACTA sobre known_domains (keyword).
+    """
+    if dev:
+        client = __get_client()
+    else:
+        client = get_opensearch_client()
+
+    # normalizamos un poco el dominio de entrada
+    domain = (domain or "").strip().lower().rstrip(".")
+
+    resp = client.search(
+        index=INDEX_KNOWN_BRANDS,
+        body={
+            "size": 1,
+            "query": {
+                "term": {
+                    "known_domains": {
+                        "value": domain
+                    }
+                }
+            }
+        }
+    )
+
+    hits = resp.get("hits", {}).get("hits", [])
+    return hits[0] if hits else None
+
 def identify_brand_by_similarity(domain_input: str, dev=False) -> Optional[Dict]:
     """
     Algoritmo de 2 capas:
@@ -251,6 +283,7 @@ def identify_brand_by_similarity(domain_input: str, dev=False) -> Optional[Dict]
         "match_type": "similarity"
     }
 
+# SIGUIENTE: mejorar este proceso
 def guess_brand_from_whois(owner_str: str, max_results: int = 3, dev = False) -> List[Dict]:
     """
     Devuelve las marcas más probables en función del WHOIS owner.

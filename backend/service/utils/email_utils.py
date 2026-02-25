@@ -5,7 +5,7 @@ from typing import Dict
 from email_validator import validate_email, caching_resolver, EmailNotValidError
 import tldextract
 from whoare.service.service import WhoareService
-from service.known_brands_service import guess_brand_from_whois
+from service.known_brands_v3_service import identify_brand_by_similarity
 from service.omit_words_service import get_all_omit_words
 from service.ascii_cctld_service import get_fallback_by_id
 from service.ascii_geotld_service import get_country_by_id
@@ -58,7 +58,7 @@ def validate_mail(mail):
     try:
         resolver = caching_resolver(timeout=10)
 
-        emailinfo = validate_email(mail, dns_resolver=resolver, check_deliverability=True)
+        emailinfo = validate_email(mail, dns_resolver=resolver, check_deliverability=False)
         email = emailinfo.normalized
         return email
 
@@ -78,67 +78,71 @@ def extract_domain_from_email(email):
 
 def extract_company_from_domain(domain: str, dev=DEV) -> Dict:
     """
-    Intenta identificar una empresa basándose en el dominio usando:
-    - tokenización (incluyendo guiones)
-    - eliminación de omit_words
-    - fuzzy match contra brand_keywords + owner_terms en OpenSearch
+    Identifica una empresa filtrando primero el ruido (omit_words) 
+    y luego usando la lógica de similitud V3.
     """
     ext = tldextract.extract(domain)
-
+    subd_tokens = []
     tokens = []
 
-    def _split_tokens(raw: str):
-        # separamos por puntos y guiones
+    def _split_tokens(raw: str, sub=False):
+        # Separar por puntos y guiones para identificar términos individuales
         for part in raw.replace("-", ".").split("."):
             p = part.strip().lower()
             if p:
-                tokens.append(p)
+                if sub:
+                    subd_tokens.append(p)
+                else:
+                    tokens.append(p)
 
-    # extraer partes relevantes del dominio
+    # 1. Extraer partes del dominio (subdominio + dominio base)
     if ext.subdomain and ext.subdomain != "www":
-        _split_tokens(ext.subdomain)
-
+        _split_tokens(ext.subdomain, sub=True)
     if ext.domain:
         _split_tokens(ext.domain)
 
-    # limpiar omit words (mail, info, emailing, etc.)
+    # 2. Filtrar omit words (mail, info, emailing, etc.)
     filtered = [t for t in tokens if not _is_omit_word(t, dev=dev)]
+    filtered += [t for t in tokens if t not in filtered and not _is_omit_word(t, dev=dev)]
 
-    # si después de filtrar no queda nada, usamos el dominio base"
+    # Si después de filtrar no queda nada, usamos el dominio base como fallback
     if not filtered:
-        base = ext.domain or ""
-        if "-" in base:
-            base = re.split(r'[- ]', base)
-        base = base.strip().lower()
-        filtered = [base] if base else []
-
-    # cadena candidata para buscar en OpenSearch
-    if filtered:
-        candidate_str = " ".join(filtered)
+        base = ext.domain or domain
+        candidate_str = base.strip().lower()
     else:
-        candidate_str = ext.domain or domain
+        # Reconstruimos la cadena candidata sin el "ruido"
+        # Ejemplo: 'mail-santander' -> 'santander'
+        candidate_str = "-".join(filtered)
 
-    # Fuzzy match contra las brands en OpenSearch (owner_terms + brand_keywords)
-    try:
-        candidates = guess_brand_from_whois(owner_str=candidate_str, dev=dev)
-    except Exception:
-        candidates = []
+    # 3. Llamada al motor V3 con el candidato ya limpio
+    brand_data = identify_brand_by_similarity(candidate_str, dev=dev)
 
-    if candidates:
-        best = candidates[0]
-        brand_id = best["_id"]
-        score = best["_score"]
-        confidence = min(1.0, score / 10.0)   # normalización arbitraria
+    if brand_data:
+        brand_id = brand_data["id"]
+        # Confianza basada en la distancia de Levenshtein calculada en V3
+        dist = brand_data.get("distancia", 0)
+        print("dist: ", dist)
+        
+        if brand_data.get("match_type") == "exact":
+            confidence = 1.0
+        else:
+            # Penalizamos la confianza según la distancia visual
+            confidence = max(0.0, 1.0 - (dist * 0.15))
+            
+        sector = brand_data.get("sector", "general")
     else:
-        brand_id = ext.domain or domain
+        # Si no hay match en OpenSearch, devolvemos el candidato filtrado
+        brand_id = candidate_str
         confidence = 0.0
+        sector = None
 
     return {
         "company": brand_id,
-        "confidence": confidence,
+        "confidence": round(confidence, 2),
         "candidate_text": candidate_str,
+        "sector": sector,
+        "match_type": brand_data.get("match_type") if brand_data else "none"
     }
-
 
 # ========================= DOMAIN LEGITMACY ===========================
 
@@ -192,7 +196,7 @@ async def get_domain_owner(domain: str, dev = DEV) -> str:
             if registrant_org:
                 return registrant_org
             elif registrant_name:
-                return registrant_name
+                return registrant_name 
             else:
                 return None
 
@@ -264,4 +268,4 @@ async def get_domain_owner(domain: str, dev = DEV) -> str:
 
 if __name__ == "__main__":
     #print(asyncio.run(get_domain_owner("athletic-club.eus")))
-    print(extract_company_from_domain("athletic-club.eus"))
+    print(extract_company_from_domain("emailing.b4ncosntand3r-mail.eus"))

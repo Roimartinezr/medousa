@@ -1,9 +1,8 @@
-# app/services/domain_sanitizer_service/sanitize_domain.py
+# backend/service/sanitize_email.py
 import asyncio
 from .utils.email_utils import *
-from .known_brands_service import *
+from known_brands_v3_service import *
 from .mail_names_service import is_personal_mail_domain
-from .known_brands_service import *
 import uuid
 import re
 from Levenshtein import distance
@@ -240,7 +239,11 @@ async def sanitize_mail(email):
         )
 
     else:
-        # 3.4 Mirar si ya tenemos brand por keywords (root lógico)
+        # 3.4 
+        # MODIFICAR ESTA QUERY PARA RELACIONAR incoming_domain CON SU VERSION EXISTENTE EN BD
+        # ANTES SE HACIA POR KEYWORDS, PERO AHORA DELEGA TODO EN LA company_detected (nuevo kernel)
+
+        
         brand_doc = find_brand_by_keywords(ext.domain, dev=DEV)
         if brand_doc:
             src = brand_doc["_source"]
@@ -336,7 +339,6 @@ async def sanitize_mail(email):
                         add_known_domain(brand_id, dns_root_subdomain, dev=DEV)
                     add_known_domain(brand_id, dns_root_domain, dev=DEV)
                     add_owner_terms(brand_id, incoming_owner, dev=DEV)
-                    add_keyword(brand_id, ext.domain, dev=DEV)
                     brand_known_domains.add(dns_root_domain)
                 except Exception:
                     pass
