@@ -1,3 +1,5 @@
+`⚠️ This application is currently under development`
+
 # 🏛️ Medousa: AI-Powered Email Domain Sanitization & Phishing Detection
 
 An intelligent, production-ready system for validating, sanitizing, and detecting phishing attempts in email addresses. Medousa combines advanced domain analysis, WHOIS integration, brand recognition, and machine learning to provide accurate email security verdicts.
@@ -22,6 +24,21 @@ An intelligent, production-ready system for validating, sanitizing, and detectin
 ✅ **Confidence Scoring** - Get probability scores for each verdict  
 ✅ **Detailed Evidence** - Understand why an email was flagged  
 ✅ **Multi-TLD Support** - Handle ASCII, IDN, and geo-based TLDs  
+
+## 🪀 Flow
+```mermaid
+graph TD
+    A[📥 Incoming Mail] --> B{Minimum Validations}
+    B -->|Fail| Z[🚫 Reject/Spam]
+    B -->|Pass| C[🔍 Target Company Detection]
+    C --> D[🔗 Entity Linkage]
+    D --> E[👤 Search for Registrant Identity of incoming domain]
+    E --> F[⚖️ Comparison of Terms]
+    F --> G[📊 Response with % Confidence]
+
+    style G fill:#f9f,stroke:#333,stroke-width:2px
+    style Z fill:#ff9999,stroke:#333
+```
 
 ## 🏗️ Architecture
 
@@ -185,13 +202,69 @@ DomainSanitizerService.ensure_mail_names_index()
 ```
 ## 📊 Data Models
 ### Known Brands (V3) Index
+
+**Configuration:**
+```json
+"settings": {
+            "index": { "max_ngram_diff": 0 },
+            "analysis": {
+                "char_filter": {
+                    "normalizacion_visual": {
+                        "type": "mapping",
+                        "mappings": [
+                            "- => ",
+                            "4 => a",
+                            "3 => e",
+                            "1 => i",
+                            "0 => o",
+                            "5 => s",
+                            "7 => t",
+                            "8 => b"
+                        ]
+                    }
+                },
+                "analyzer": {
+                    "ana_2": { "tokenizer": "tok_2", "filter": ["lowercase"], "char_filter": ["normalizacion_visual"] },
+                    "ana_3": { "tokenizer": "tok_3", "filter": ["lowercase"], "char_filter": ["normalizacion_visual"] },
+                    "ana_4": { "tokenizer": "tok_4", "filter": ["lowercase"], "char_filter": ["normalizacion_visual"] }
+                },
+                "tokenizer": {
+                    "tok_2": { "type": "ngram", "min_gram": 2, "max_gram": 2, "token_chars": ["letter", "digit"] },
+                    "tok_3": { "type": "ngram", "min_gram": 3, "max_gram": 3, "token_chars": ["letter", "digit"] },
+                    "tok_4": { "type": "ngram", "min_gram": 4, "max_gram": 4, "token_chars": ["letter", "digit"] }
+                }
+            }
+        },
+        "mappings": {
+            "properties": {
+                "sector": { "type": "keyword" },
+                "known_domains": { "type": "keyword" },
+                "owner_terms": { "type": "keyword" },
+                "domain_search": {
+                    "type": "text",
+                    "fields": {
+                        "2gram": { "type": "text", "analyzer": "ana_2", "norms": False, "similarity": "boolean" },
+                        "3gram": { "type": "text", "analyzer": "ana_3", "norms": False, "similarity": "boolean" },
+                        "4gram": { "type": "text", "analyzer": "ana_4", "norms": False, "similarity": "boolean" }
+                    }
+                }
+            }
+        }
+```
+
+**Registries:**
 ```json
 {
-  "_id": "brand_id",
+  "_id": "bancosantander",
   "country_code": "es",
-  "owner_terms": "banco bilbao vizcaya argentaria",
-  "keywords": ["bbva", "bilbao", "vizcaya"],
-  "known_domains": ["bbva.es", "bbva.com"]
+  "_source": {
+          "sector": "banca",
+          "known_domains": [
+            "bancosantander.com"
+          ],
+          "owner_terms": ["banco", "santander", "sa"],
+          "domain_search": "bancosantander"
+        }
 }
 ```
 ## 🔐 Security Considerations
