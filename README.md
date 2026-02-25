@@ -1,4 +1,5 @@
 `⚠️ This application is currently under development`
+`For the last updates review the FEATURE branch`
 
 # 🏛️ Medousa: AI-Powered Email Domain Sanitization & Phishing Detection
 
