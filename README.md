@@ -47,14 +47,14 @@ Medousa is a **full-stack microservices application** with two main components:
 
 ### Backend (Python + FastAPI)
 
-A robust REST API built with Flask that handles all domain analysis logic:
+A robust REST API built with FastAPI that handles all domain analysis logic:
 
 ```text
 backend/
 ├── app.py                    # FastAPI application entry point
 ├── opensearch_client.py      # OpenSearch connection management
 ├── requirements.txt          # Python dependencies
-└── service/                  # Core business logic
+├── service/                  # Core business logic
     ├── service.py            # Main DomainSanitizerService
     ├── sanitize_email.py     # Email validation & phishing detection
     ├── known_brands_v3_service.py # Brand database & matching
@@ -64,12 +64,12 @@ backend/
     ├── ascii_cctld_service.py     # Country code TLD management
     ├── ascii_geotld_service.py    # Geographic TLD handling
     └── idn_cctld_service.py       # Internationalized domain names
-├── whoare/                   # Custom WHOIS scraping module
+└── whoare/                   # Custom WHOIS scraping module
     ├── adapters/             # Repository of TLDs support, and their respectives parsers
     ├── scrap/                # Specific scripts for scraping from different sources
-    ├── service/
+    └── service/
         ├── service.py            # Hosts the main method
-        ├── get_whois_service.py  # Handles the ccTLD and gTLD differences for the scrap
+        └── get_whois_service.py  # Handles the ccTLD and gTLD differences for the scrap
 
 ```
 **Key Technologies:**
