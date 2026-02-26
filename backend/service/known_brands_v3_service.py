@@ -4,23 +4,10 @@ import re
 from typing import List, Dict, Optional
 import Levenshtein
 import tldextract
-from opensearchpy import OpenSearch, NotFoundError
+from opensearchpy import NotFoundError
 from opensearch_client import get_opensearch_client 
 
-DEV = False
-
 INDEX_KNOWN_BRANDS = "known_brands_v3"
-
-def __get_client(dev=False) -> OpenSearch:
-    if dev:
-        return OpenSearch(
-            hosts=[{"host": "localhost", "port": "9200"}],
-            http_compress=True,
-            use_ssl=False,
-            verify_certs=False,
-            ssl_show_warn=False,
-        )
-    return get_opensearch_client()
 
 # ---------------------------------------------------------
 # NORMALIZACIÓN Y UTILIDADES
@@ -57,9 +44,9 @@ def _tokenize_str(text: str) -> List[str]:
 # GESTIÓN DEL ÍNDICE (MAPPING V3)
 # ---------------------------------------------------------
 
-def ensure_known_brands_v3_index(dev=False) -> None:
+def ensure_known_brands_v3_index() -> None:
 
-    client = __get_client(dev)
+    client = get_opensearch_client()
 
     if client.indices.exists(index=INDEX_KNOWN_BRANDS):
         return
@@ -121,14 +108,13 @@ def upsert_brand(
     brand_id: str,
     sector: str = "general",
     owner_terms: List[str] = "",
-    known_domains: List[str] = None,
-    dev=False
+    known_domains: List[str] = None
 ) -> None:
     """
     Crea o actualiza una brand completa con el NUEVO formato.
     """
     
-    client = __get_client(dev)
+    client = get_opensearch_client()
     
     # El domain_search se nutre del brand_id automáticamente por el mapping
     payload = {
@@ -182,15 +168,13 @@ def _backup_fuzzy_match(client, clean_input):
         "match_type": "similarity"
     }
 
-def find_brand_by_known_domain(domain: str, dev = DEV) -> Optional[Dict]:
+def find_brand_by_known_domain(domain: str) -> Optional[Dict]:
     """
     ¿Este dominio ya pertenece a alguna brand?
     Búsqueda por coincidencia EXACTA sobre known_domains (keyword).
     """
-    if dev:
-        client = __get_client()
-    else:
-        client = get_opensearch_client()
+
+    client = get_opensearch_client()
 
     # normalizamos un poco el dominio de entrada
     domain = (domain or "").strip().lower().rstrip(".")
@@ -212,14 +196,14 @@ def find_brand_by_known_domain(domain: str, dev = DEV) -> Optional[Dict]:
     hits = resp.get("hits", {}).get("hits", [])
     return hits[0] if hits else None
 
-def identify_brand_by_similarity(domain_input: str, dev=False) -> Optional[Dict]:
+def identify_brand_by_similarity(domain_input: str) -> Optional[Dict]:
     """
     Algoritmo de 2 capas:
     1. Filtro de n-gramas variable en OpenSearch.
     2. Refinamiento por distancia de Levenshtein.
     """
 
-    client = __get_client(dev)
+    client = get_opensearch_client()
     
     # 1. Match Directo (Prioridad Máxima)
     try:
@@ -276,21 +260,16 @@ def identify_brand_by_similarity(domain_input: str, dev=False) -> Optional[Dict]
             distancia_min = dist
             mejor_match = c
 
-    return {
-        **mejor_match['_source'],
-        "id": mejor_match['_id'],
-        "distancia": distancia_min,
-        "match_type": "similarity"
-    }
+    return mejor_match
 
 # SIGUIENTE: mejorar este proceso
-def guess_brand_from_whois(owner_str: str, max_results: int = 3, dev = False) -> List[Dict]:
+def guess_brand_from_whois(owner_str: str, max_results: int = 3) -> List[Dict]:
     """
     Devuelve las marcas más probables en función del WHOIS owner.
     Pondera fuertemente 'keywords' y, si hay suficiente texto, también 'owner_terms'.
     """
 
-    client = __get_client(dev)
+    client = get_opensearch_client()
     
     owner_str = (owner_str or "").strip()
     if not owner_str:
@@ -338,12 +317,12 @@ def guess_brand_from_whois(owner_str: str, max_results: int = 3, dev = False) ->
 # MANTENIMIENTO DE COLECCIONES
 # ---------------------------------------------------------
 
-def add_known_domain(brand_id: str, domain: str, dev = False) -> None:
+def add_known_domain(brand_id: str, domain: str) -> None:
     """
     Añade un dominio al array known_domains si no existe.
     """
 
-    client = __get_client(dev)
+    client = get_opensearch_client()
 
     client.update(
         index=INDEX_KNOWN_BRANDS,
@@ -364,13 +343,13 @@ def add_known_domain(brand_id: str, domain: str, dev = False) -> None:
         }
     )
 
-def add_owner_terms(brand_id: str, owner_str: str, dev = False) -> None:
+def add_owner_terms(brand_id: str, owner_str: str) -> None:
     """
     Añade tokens de WHOIS al campo owner_terms SIN duplicados.
     owner_terms es la “bolsa de términos” que nutre el fuzzy.
     """
     
-    client = __get_client(dev)
+    client = get_opensearch_client()
 
     # tokens nuevos (normalizados) que vienen del WHOIS actual
     new_tokens = _tokenize_str(owner_str)
@@ -414,8 +393,7 @@ def ensure_brand_for_root_domain(
     root_domain: str,
     owner_str: str,
     sector: Optional[str] = None,
-    brand_id_hint: Optional[str] = None,
-    dev = False
+    brand_id_hint: Optional[str] = None
 ) -> str:
     """
     Garantiza que exista una brand para root_domain.
@@ -423,7 +401,7 @@ def ensure_brand_for_root_domain(
     - Si la brand YA existe → solo enriquece: known_domains + owner_terms.
     """
 
-    client = __get_client(dev)
+    client = get_opensearch_client()
 
     ext = tldextract.extract(root_domain)
 
@@ -434,8 +412,8 @@ def ensure_brand_for_root_domain(
     try:
         client.get(index=INDEX_KNOWN_BRANDS, id=brand_id)
         # ➜ Brand existente: solo nutrimos
-        add_known_domain(brand_id, root_domain, dev=dev)
-        add_owner_terms(brand_id, owner_str, dev=dev)
+        add_known_domain(brand_id, root_domain)
+        add_owner_terms(brand_id, owner_str)
         return brand_id
 
     except NotFoundError:
@@ -447,7 +425,6 @@ def ensure_brand_for_root_domain(
             brand_id = brand_id,
             sector = sector or None,
             owner_terms = owner_terms,
-            known_domains = [root_domain],
-            dev = dev
+            known_domains = [root_domain]
         )
         return brand_id
