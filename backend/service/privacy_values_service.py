@@ -9,7 +9,6 @@ from opensearch_client import get_opensearch_client
 INDEX_PRIVACY_VALUES = "privacy_values"
 DOC_ID_PRIVACY_VALUES = "whois_privacy_values"
 
-
 # ---------------------------------------------------------
 # CREACIÓN DE ÍNDICE
 # ---------------------------------------------------------

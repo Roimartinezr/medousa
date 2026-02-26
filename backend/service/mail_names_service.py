@@ -90,14 +90,11 @@ def bulk_seed_mail_names(domains: List[str]) -> None:
         helpers.bulk(client, actions)
 
 
-def get_mail_name(domain: str, dev = False) -> Optional[Dict]:
+def get_mail_name(domain: str) -> Optional[Dict]:
     """
     Devuelve el documento de mail_names para ese dominio (si existe).
     """
-    if dev:
-        client = __get_client()
-    else:
-        client = get_opensearch_client()
+    client = get_opensearch_client()
 
     resp = client.search(
         index=INDEX_MAIL_NAMES,
@@ -112,8 +109,8 @@ def get_mail_name(domain: str, dev = False) -> Optional[Dict]:
     return hits[0] if hits else None
 
 
-def is_personal_mail_domain(domain: str, dev = False) -> bool:
+def is_personal_mail_domain(domain: str) -> bool:
     """
     True si el dominio es un proveedor personal (gmail, outlook, etc.).
     """
-    return get_mail_name(domain, dev=dev) is not None
+    return get_mail_name(domain) is not None

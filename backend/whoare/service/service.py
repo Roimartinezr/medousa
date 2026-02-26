@@ -1,14 +1,12 @@
-#app/backend/scrap/service/service.py
+#app/backend/whoare/service/service.py
+
 from pathlib import Path
 import tldextract
-import asyncio
 from service.ascii_cctld_service import get_all_ascii_cctld_ids
 from service.idn_cctld_service import get_all_idn_cctld_ids
 from service.ascii_geotld_service import get_all_ascii_geotld_ids
 from .get_whois_service import get_whois_cctld, get_whois_gtld
 
-# PRODUCCION / DESARROLLO
-DEV = False
 
 class WhoareServiceError(Exception):
     """Clase base para todas las excepciones de este servicio."""
@@ -20,15 +18,15 @@ class NotSupportedTLDError(WhoareServiceError):
 class WhoareService:
 
     @staticmethod
-    async def whoare(domain: str, dev = DEV):
+    async def whoare(domain: str):
         if not domain:
             return None
 
         tld = tldextract.extract(domain).suffix.split('.')[-1]
 
-        ascii_cctls = get_all_ascii_cctld_ids(dev=dev)
-        idn_cctlds = get_all_idn_cctld_ids(dev=dev)
-        ascii_geotlds = get_all_ascii_geotld_ids(dev=dev)
+        ascii_cctls = get_all_ascii_cctld_ids()
+        idn_cctlds = get_all_idn_cctld_ids()
+        ascii_geotlds = get_all_ascii_geotld_ids()
 
         if tld in ascii_cctls or tld in idn_cctlds or tld in ascii_geotlds:
             
@@ -45,8 +43,8 @@ class WhoareService:
                     )
                 else:
                     if tld in ascii_geotlds:
-                        return await get_whois_cctld(domain, geoTLD=True, dev=dev)
-                    return await get_whois_cctld(domain, dev=dev)
+                        return await get_whois_cctld(domain, geoTLD=True)
+                    return await get_whois_cctld(domain)
 
             else:
                 raise WhoareServiceError(

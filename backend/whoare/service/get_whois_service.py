@@ -1,4 +1,5 @@
-#app/backend/scrap/service/scrap_owner_service.py
+#app/backend/whoare/service/get_whois_service.py
+
 import tldextract
 import whois
 import json
@@ -26,8 +27,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-# PRODUCCION / DESARROLLO
-DEV = False
 
 DATE_KEYS = {"creation_date", "expiration_date", "updated_date"}
 UA_MULTI_VALUE_TLD = "ua"
@@ -74,7 +73,7 @@ def _normalize_value(value):
     if isinstance(value, datetime): return value.isoformat()
     return value
 
-async def get_whois_cctld(domain: str, geoTLD = False, dev = DEV):
+async def get_whois_cctld(domain: str, geoTLD = False):
     # estract tld from domain
     ext = tldextract.extract(domain)
     tld = ext.suffix.split('.')[-1]
@@ -99,11 +98,11 @@ async def get_whois_cctld(domain: str, geoTLD = False, dev = DEV):
 
     # get tld BD's data
     if geoTLD:
-        src = get_ascii_geotld_by_id(tld, dev=dev)
+        src = get_ascii_geotld_by_id(tld)
     elif idn:
-        src = get_idn_cctld_by_id(tld, dev=dev)
+        src = get_idn_cctld_by_id(tld)
     else:
-        src = get_ascii_cctld_by_id(tld, dev=dev)
+        src = get_ascii_cctld_by_id(tld)
 
     scraping_site = src.get("scraping_site", "") or ""
 
