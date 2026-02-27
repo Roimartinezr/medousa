@@ -323,15 +323,17 @@ DomainSanitizerService.upsert_brand(
 
 **Registries:**
 ```json
-"_id": "de",
-"_source": {
-    "country": "Germany",
-    "scraping_site": "whois",
-    "fallback": [
-        "nl",
-        "fr",
-        "pl"
-    ]
+{
+    "_id": "de",
+    "_source": {
+        "country": "Germany",
+        "scraping_site": "whois",
+        "fallback": [
+            "nl",
+            "fr",
+            "pl"
+        ]
+    }
 }
 ```
 
