@@ -26,6 +26,7 @@ An intelligent, production-ready system for validating, sanitizing, and detectin
 ✅ **Detailed Evidence** - Understand why an email was flagged  
 ✅ **Multi-TLD Support** - Handle ASCII, IDN, and geo-based TLDs  
 
+
 ## 🪀 Flow
 ```mermaid
 graph TD
@@ -41,6 +42,7 @@ graph TD
     style Z fill:#ff9999,stroke:#333
 ```
 
+
 ## 🏗️ Architecture
 
 Medousa is a **full-stack microservices application** with two main components:
@@ -55,8 +57,12 @@ backend/
 ├── opensearch_client.py      # OpenSearch connection management
 ├── requirements.txt          # Python dependencies
 ├── service/                  # Core business logic
+    ├── utils/                
+        ├── recognition.py     # ENTITIES LINKAGE KERNEL        <==================================
+        ├── legitmacy.py       # DOMAIN LEGITIMATION KERNEL     <=============================
+        └── email_utils.py     # some useful methods
     ├── service.py            # Main DomainSanitizerService
-    ├── sanitize_email.py     # Email validation & phishing detection
+    ├── sanitize_email.py     # MAIN FLOW      <=======================================================
     ├── known_brands_v3_service.py # Brand database & matching
     ├── mail_names_service.py      # Personal email providers
     ├── omit_words_service.py      # Domain parsing hints
@@ -101,6 +107,7 @@ frontend/
 - **React Router** - Client-side routing
 - **React Hook Form** - Form state management
 - **Recharts** - Data visualization
+
 
 ## 🚀 Quick Start
 
@@ -168,6 +175,7 @@ Response:
 | phishing | High confidence of malicious intent. |
 | invalid | Email format or domain doesn't exist. |
 
+
 ## 📚 Core Modules
 ### DomainSanitizerService
 The main service orchestrating all sanitization logic:
@@ -177,30 +185,29 @@ from backend.service.service import DomainSanitizerService
 result = await DomainSanitizerService.sanitize_mail("noreply@example.com")
 ```
 **Key Methods:**
-
 * `sanitize_mail(email)` - Primary validation & analysis function
 * `ensure_known_brands_index()` - Initialize brand database
 * `ensure_mail_names_index()` - Initialize email provider list
 * `ensure_omit_words_index()` - Load domain parsing rules
 * `ensure_privacy_values_index()` - Load WHOIS privacy patterns
 
-**Brand Recognition**
-Matches email domains against your brand database:
-```python
-DomainSanitizerService.upsert_brand(
-    brand_id="bbva_spain",
-    country_code="es",
-    keywords=["bbva", "bilbao", "vizcaya"],
-    owner_terms="Banco Bilbao Vizcaya Argentaria SA",
-    known_domains=["bbva.es", "bbva.com"]
-)
-```
-**Personal Email Providers**
-Identifies free/personal email services:
-```python
-DomainSanitizerService.ensure_mail_names_index()
-# Includes Gmail, Outlook, Yahoo, Proton, etc.
-```
+
+### backend/service/utils/*RECOGNITION*.py
+The heart of detecting potentially impersonated companies.
+
+**Key Methods:**
+* `extract_company_from_domain(domain)` - Clean up the domain of omissible words, and try to recognise a company
+
+
+### backend/service/utils/*LEGITMACY*.py
+It is the core for legitimising an incoming domain.
+
+**Key Methods:**
+* `get_domain_owner(domain)` - Use the WHOARE module to obtain the registrant details for a domain name.
+Employ a fallback policy to ensure that you always obtain one, even when the value is *redacted for privacy* reasons
+* `guess_brand_from_whois(owner_str)` - It is capable of detecting a company in DB based on the data of a domain registrant
+
+
 ## 📊 Data Models
 ### Known Brands (V3) Index
 
@@ -240,7 +247,13 @@ DomainSanitizerService.ensure_mail_names_index()
             "properties": {
                 "sector": { "type": "keyword" },
                 "known_domains": { "type": "keyword" },
-                "owner_terms": { "type": "keyword" },
+                "owner_terms": {
+                    "type": "keyword",
+                    "fields": {
+                        "2gram": {"type": "text", "analyzer": "ana_2", "norms": False, "similarity": "boolean"},
+                        "3gram": {"type": "text", "analyzer": "ana_3", "norms": False, "similarity": "boolean"}
+                    }
+                },
                 "domain_search": {
                     "type": "text",
                     "fields": {
@@ -261,13 +274,67 @@ DomainSanitizerService.ensure_mail_names_index()
   "_source": {
           "sector": "banca",
           "known_domains": [
-            "bancosantander.com"
+            "bancosantander.com",
+            "bancosantander.es"
           ],
           "owner_terms": ["banco", "santander", "sa"],
           "domain_search": "bancosantander"
         }
 }
 ```
+
+**Add a new brand**
+```python
+DomainSanitizerService.upsert_brand(
+    brand_id = "bbva",
+    sector = "banca",
+    owner_terms = ["bbva", "banco", "bilbao", "vizcaya"],
+    known_domains = ["bbva.es", "bbva.com"]
+)
+```
+
+### ASCII ccTLD
+
+**Configuration:**
+```json
+"settings": {
+      "index": {
+        "replication": {"type": "DOCUMENT"},
+        "number_of_shards": "1",
+        "provided_name": "ascii_cctld"
+      }
+    },
+    "mappings": {
+      "properties": {
+        "country": {"type": "text"},
+        "fallback": {
+            "type": "text",
+            "fields": {
+            "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+            }
+          }
+        },
+        "scraping_site": {"type": "keyword"}
+      }
+    }
+```
+
+**Registries:**
+```json
+"_id": "de",
+"_source": {
+    "country": "Germany",
+    "scraping_site": "whois",
+    "fallback": [
+        "nl",
+        "fr",
+        "pl"
+    ]
+}
+```
+
 ## 🔐 Security Considerations
 * ✅ CORS enabled for cross-origin requests
 * ✅ Input validation on all endpoints
