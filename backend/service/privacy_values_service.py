@@ -4,11 +4,10 @@ from typing import List
 from functools import lru_cache
 
 from opensearchpy import OpenSearch, NotFoundError
-from ..opensearch_client import get_opensearch_client
+from opensearch_client import get_opensearch_client
 
 INDEX_PRIVACY_VALUES = "privacy_values"
 DOC_ID_PRIVACY_VALUES = "whois_privacy_values"
-
 
 # ---------------------------------------------------------
 # CREACIÓN DE ÍNDICE
@@ -21,7 +20,7 @@ def ensure_privacy_values_index() -> None:
     """
     client: OpenSearch = get_opensearch_client()
 
-    if client.indices.exists(INDEX_PRIVACY_VALUES):
+    if client.indices.exists(index=INDEX_PRIVACY_VALUES):
         return
 
     body = {

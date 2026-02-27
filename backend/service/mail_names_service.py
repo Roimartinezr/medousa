@@ -3,10 +3,18 @@
 from typing import List, Optional, Dict
 
 from opensearchpy import OpenSearch, helpers
-from ..opensearch_client import get_opensearch_client
+from opensearch_client import get_opensearch_client
 
 INDEX_MAIL_NAMES = "mail_names"
 
+def __get_client() -> OpenSearch:
+        return OpenSearch(
+            hosts=[{"host": "localhost", "port": "9200"}],
+            http_compress=True,
+            use_ssl=False,
+            verify_certs=False,
+            ssl_show_warn=False,
+        )
 
 def ensure_mail_names_index() -> None:
     """
@@ -14,7 +22,7 @@ def ensure_mail_names_index() -> None:
     Guarda proveedores personales tipo gmail.com, outlook.com, etc.
     """
     client: OpenSearch = get_opensearch_client()
-    if client.indices.exists(INDEX_MAIL_NAMES):
+    if client.indices.exists(index=INDEX_MAIL_NAMES):
         return
 
     body = {
@@ -87,6 +95,7 @@ def get_mail_name(domain: str) -> Optional[Dict]:
     Devuelve el documento de mail_names para ese dominio (si existe).
     """
     client = get_opensearch_client()
+
     resp = client.search(
         index=INDEX_MAIL_NAMES,
         body={

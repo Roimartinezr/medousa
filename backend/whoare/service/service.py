@@ -1,11 +1,12 @@
-#app/backend/scrap/service/service.py
+#app/backend/whoare/service/service.py
+
 from pathlib import Path
 import tldextract
-import asyncio
-from ...service.ascii_cctld_service import get_all_ascii_cctld_ids
-from ...service.idn_cctld_service import get_all_idn_cctld_ids
-from ...service.ascii_geotld_service import get_all_ascii_geotld_ids
+from service.ascii_cctld_service import get_all_ascii_cctld_ids
+from service.idn_cctld_service import get_all_idn_cctld_ids
+from service.ascii_geotld_service import get_all_ascii_geotld_ids
 from .get_whois_service import get_whois_cctld, get_whois_gtld
+
 
 class WhoareServiceError(Exception):
     """Clase base para todas las excepciones de este servicio."""
@@ -23,14 +24,9 @@ class WhoareService:
 
         tld = tldextract.extract(domain).suffix.split('.')[-1]
 
-        # PRODUCCION
         ascii_cctls = get_all_ascii_cctld_ids()
         idn_cctlds = get_all_idn_cctld_ids()
         ascii_geotlds = get_all_ascii_geotld_ids()
-        # DESARROLLO
-        #ascii_cctls = get_all_ascii_cctld_ids(dev=True)
-        #idn_cctlds = get_all_idn_cctld_ids(dev=True)
-        #ascii_geotlds = get_all_ascii_geotld_ids(dev=True)
 
         if tld in ascii_cctls or tld in idn_cctlds or tld in ascii_geotlds:
             

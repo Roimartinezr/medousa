@@ -1,20 +1,23 @@
 # app/services/domain_sanitizer_service/omit_words_service.py
 
+"""
+PARA QUE UNA OMIT WORD SE CARGUE, DEBE ESTAR MARCADA COMO 'active' en OpenSearch
+"""
+
 from typing import List, Optional
 from opensearchpy import OpenSearch, helpers
-
-from ..opensearch_client import get_opensearch_client
+from opensearch_client import get_opensearch_client
 
 INDEX_OMIT_WORDS = "omit_words"
-
 
 def ensure_omit_words_index() -> None:
     """
     Crea el índice 'omit_words' si no existe.
     Guarda palabras que se deben ignorar al extraer la company del dominio.
     """
-    client: OpenSearch = get_opensearch_client()
-    if client.indices.exists(INDEX_OMIT_WORDS):
+    client = get_opensearch_client()
+
+    if client.indices.exists(index=INDEX_OMIT_WORDS):
         return
 
     body = {
@@ -40,9 +43,9 @@ def ensure_omit_words_index() -> None:
 
 
 def upsert_omit_word(word: str,
-                     lang: Optional[str] = None,
-                     scope: Optional[str] = None,
-                     active: bool = True) -> None:
+                    lang: Optional[str] = None,
+                    scope: Optional[str] = None,
+                    active: bool = True) -> None:
     """
     Crea o actualiza una palabra omitible.
     Usa la propia palabra como _id para no duplicar.
@@ -90,6 +93,7 @@ def get_all_omit_words(active_only: bool = True) -> List[str]:
     """
     Devuelve todas las palabras omitibles (por defecto solo las activas).
     """
+
     client = get_opensearch_client()
 
     query: dict
@@ -109,3 +113,39 @@ def get_all_omit_words(active_only: bool = True) -> List[str]:
 
     hits = resp.get("hits", {}).get("hits", [])
     return [h["_source"]["word"] for h in hits]
+
+
+def activate_all_omit_words():
+    client = get_opensearch_client()
+    index_name = "omit_words"
+
+    # Definimos la actualización masiva
+    update_body = {
+        "script": {
+            "source": "ctx._source.active = true",
+            "lang": "painless"
+        },
+        "query": {
+            "match_all": {}
+        }
+    }
+
+    print(f"Actualizando documentos en el índice '{index_name}'...")
+    
+    try:
+        response = client.update_by_query(
+            index=index_name, 
+            body=update_body,
+            wait_for_completion=True # Esperamos a que termine para ver el resultado
+        )
+        
+        updated = response.get("updated", 0)
+        batches = response.get("batches", 0)
+        
+        print(f"Se han activado {updated} palabras en {batches} lotes.")
+        
+    except Exception as e:
+        print(f"Error al actualizar: {str(e)}")
+
+
+#upsert_omit_word("mail")
