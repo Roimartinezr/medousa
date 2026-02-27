@@ -86,7 +86,13 @@ def ensure_known_brands_v3_index() -> None:
             "properties": {
                 "sector": { "type": "keyword" },
                 "known_domains": { "type": "keyword" },
-                "owner_terms": { "type": "keyword" },
+                "owner_terms": {
+                    "type": "keyword",
+                    "fields": {
+                        "2gram": {"type": "text", "analyzer": "ana_2", "norms": False, "similarity": "boolean"},
+                        "3gram": {"type": "text", "analyzer": "ana_3", "norms": False, "similarity": "boolean"}
+                    }
+                },
                 "domain_search": {
                     "type": "text",
                     "fields": {
@@ -266,17 +272,19 @@ def identify_brand_by_similarity(domain_input: str) -> Optional[Dict]:
 def guess_brand_from_whois(owner_str: str, max_results: int = 3) -> List[Dict]:
     """
     Devuelve las marcas más probables en función del WHOIS owner.
-    Pondera fuertemente 'keywords' y, si hay suficiente texto, también 'owner_terms'.
+    Pondera fuertemente 'domain_search' y usa un sistema de puntos por token para 'owner_terms'.
     """
-
     client = get_opensearch_client()
     
     owner_str = (owner_str or "").strip()
     if not owner_str:
         return []
 
-    tokens = owner_str.split()
+    # Limpiamos y tokenizamos. Descartamos caracteres sueltos (len < 2) porque 
+    # no tenemos analizadores para 1-gram y solo meterían ruido.
+    tokens = [t for t in owner_str.split() if len(t) >= 2]
 
+    # 1. Cláusula original para domain_search (Se mantiene igual)
     should_clauses = [
         {
             "match": {
@@ -289,14 +297,35 @@ def guess_brand_from_whois(owner_str: str, max_results: int = 3) -> List[Dict]:
         }
     ]
 
-    if len(tokens) > 2:
-        should_clauses.append({
-            "match": {
-                "owner_terms": {
-                    "query": owner_str,
-                    "boost": 1,
-                    "fuzziness": "AUTO"
+    # 2. Nueva lógica de "Puntos" para owner_terms
+    if tokens:
+        owner_terms_should = []
+        
+        for token in tokens:
+            # Redirección dinámica según la longitud de la palabra
+            campo_objetivo = "owner_terms.2gram" if len(token) == 2 else "owner_terms.3gram"
+            
+            owner_terms_should.append({
+                "match": {
+                    campo_objetivo: {
+                        "query": token,
+                        "minimum_should_match": "75%", # Exige que el 75% de los n-gramas de esta palabra coincidan
+                        "boost": 1 # Cada palabra validada suma "1 punto"
+                    }
                 }
+            })
+        
+        # ¿Cuántos puntos (palabras) consideramos "suficientes" para un match real?
+        # Usar un porcentaje es la forma más dinámica de gestionarlo sea cual sea el tamaño del array.
+        # Por ejemplo, pedimos que al menos el 60% de las palabras del input coincidan. 
+        # Si son 3 palabras, pedirá 2. Si son 5, pedirá 3.
+        puntos_necesarios = "60%" if len(tokens) > 2 else 1
+
+        # Anidamos el sistema de puntos dentro del query principal
+        should_clauses.append({
+            "bool": {
+                "should": owner_terms_should,
+                "minimum_should_match": puntos_necesarios
             }
         })
 
@@ -305,7 +334,7 @@ def guess_brand_from_whois(owner_str: str, max_results: int = 3) -> List[Dict]:
         "query": {
             "bool": {
                 "should": should_clauses,
-                "minimum_should_match": 1
+                "minimum_should_match": 1 # Exige que al menos domain_search o el bloque de owner_terms hagan match
             }
         }
     }
