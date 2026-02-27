@@ -176,7 +176,7 @@ async def sanitize_mail(email):
 
     # 3.1 Heurística para sacar "company base" (usa omit_words y OpenSearch)
     domain_info = extract_company_from_domain(incoming_domain)
-    base_company = domain_info["company"]  # ej: "bancosantander"
+    base_company = domain_info["_id"] or None  # ej: "bancosantander"
 
     # --- NUEVO: suffix lógico para la brand ---
     logical_suffix = ext.suffix or ""
@@ -231,13 +231,7 @@ async def sanitize_mail(email):
 
         brand_known_domains = set(src.get("known_domains", []))
         owner_terms = src.get("owner_terms", "")
-        keywords = src.get("keywords", [])
-        brand_profile = " ".join(
-            [
-                owner_terms,
-                " ".join(keywords)
-            ]
-        )
+        brand_profile = " ".join(owner_terms)
 
     else:
         # 3.4 
@@ -254,13 +248,7 @@ async def sanitize_mail(email):
 
             brand_known_domains = set(src.get("known_domains", []))
             owner_terms = src.get("owner_terms", "")
-            keywords = src.get("keywords", [])
-            brand_profile = " ".join(
-                [
-                    owner_terms,
-                    " ".join(keywords)
-                ]
-            )
+            brand_profile = " ".join(owner_terms)
         else:
             new_brand = True
             # 3.5 No existe brand aún en OpenSearch para este root_domain lógico
