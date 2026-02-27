@@ -293,7 +293,7 @@ DomainSanitizerService.upsert_brand(
 )
 ```
 
-### ASCII ccTLD
+### ASCII ccTLD Index
 
 **Configuration:**
 ```json
@@ -324,8 +324,8 @@ DomainSanitizerService.upsert_brand(
 **Registries:**
 ```json
 {
-    "_id": "de",
-    "_source": {
+  "_id": "de",
+  "_source": {
         "country": "Germany",
         "scraping_site": "whois",
         "fallback": [
@@ -333,7 +333,7 @@ DomainSanitizerService.upsert_brand(
             "fr",
             "pl"
         ]
-    }
+  }
 }
 ```
 
