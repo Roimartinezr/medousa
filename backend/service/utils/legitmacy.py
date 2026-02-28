@@ -1,9 +1,11 @@
 # app/backend/service/utils/legitmacy.py
 
 import tldextract
+from typing import List, Dict
 from whoare.service.service import WhoareService
 from service.ascii_cctld_service import get_fallback_by_id
 from service.ascii_geotld_service import get_country_by_id
+from service.known_brands_v3_service import guess_brand_from_whois
 import logging
 
 logger = logging.getLogger(__name__)
@@ -136,3 +138,6 @@ async def get_domain_owner(domain: str) -> str:
                 return None
 
     return None
+
+def identify_brand_from_registrant(registrant_str: str) -> List[Dict]:
+    return guess_brand_from_whois(registrant_str)
