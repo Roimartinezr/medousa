@@ -205,7 +205,7 @@ It is the core for legitimising an incoming domain.
 **Key Methods:**
 * `get_domain_owner(domain)` - Use the WHOARE module to obtain the registrant details for a domain name.
 Employ a fallback policy to ensure that you always obtain one, even when the value is *redacted for privacy* reasons
-* `guess_brand_from_whois(owner_str)` - It is capable of detecting a company in DB based on the data of a domain registrant
+* `identify_brand_from_registrant(owner_str)` - It is capable of detecting a company in DB based on the data of a domain registrant
 
 
 ## 📊 Data Models
