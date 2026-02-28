@@ -4,14 +4,13 @@ import re
 import uuid
 import asyncio
 import tldextract
+import logging
+from Levenshtein import distance
 from .utils.email_utils import validate_mail, extract_domain_from_email
-from .utils.legitmacy import get_domain_owner
+from .utils.legitmacy import get_domain_owner, identify_brand_from_registrant
 from .utils.recognition import extract_company_from_domain
 from known_brands_v3_service import find_brand_by_known_domain, ensure_brand_for_root_domain, add_known_domain, add_owner_terms
 from .mail_names_service import is_personal_mail_domain
-from Levenshtein import distance
-
-import logging
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)

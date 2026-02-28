@@ -2,8 +2,6 @@
 
 from typing import Dict
 import tldextract
-from service.known_brands_v3_service import identify_brand_by_similarity
-from service.omit_words_service import get_all_omit_words
 import logging
 
 logger = logging.getLogger(__name__)
@@ -18,6 +16,7 @@ def _load_omit_words_cache():
     Carga las omit_words desde OpenSearch solo una vez.
     Si no se puede conectar, deja el set vacío y no rompe el arranque.
     """
+    from service.omit_words_service import get_all_omit_words
     global OMIT_WORDS_CACHE, OMIT_WORDS_LOADED
     if OMIT_WORDS_LOADED:
         return
@@ -42,6 +41,7 @@ def extract_company_from_domain(domain: str) -> Dict:
     Identifica una empresa filtrando primero el ruido (omit_words) 
     y luego usando la lógica de similitud V3.
     """
+    from service.known_brands_v3_service import identify_brand_by_similarity
     ext = tldextract.extract(domain)
     subd_tokens = []
     tokens = []
@@ -79,7 +79,3 @@ def extract_company_from_domain(domain: str) -> Dict:
     brand_data = identify_brand_by_similarity(candidate_str)
 
     return brand_data or None
-
-if __name__ == "__main__":
-    #print(asyncio.run(get_domain_owner("athletic-club.eus")))
-    print(extract_company_from_domain("emailing.b4ncosntand3r-mail.eus"))

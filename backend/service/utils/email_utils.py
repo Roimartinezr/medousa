@@ -1,9 +1,12 @@
 # app/backend/service/utils/email_utils.py
 
-from email_validator import validate_email, caching_resolver, EmailNotValidError
-
 # checks if mail is a real direction
 def validate_mail(mail):
+    """
+    Checks if the mail direction exists
+    """
+
+    from email_validator import validate_email, caching_resolver, EmailNotValidError
     try:
         resolver = caching_resolver(timeout=10)
 
@@ -18,7 +21,6 @@ def validate_mail(mail):
 def extract_domain_from_email(email):
     """
     Extracts the domain from an email.
-    Example: user@example.com -> example.com
     """
     try:
         return email.split('@')[1].lower()
