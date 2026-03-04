@@ -37,7 +37,7 @@ def _normalize_domain_for_search(domain: str) -> str:
 
 def _tokenize_str(text: str) -> List[str]:
     if not text: return []
-    text = re.sub(r"[^\w\s]", " ", text.lower())
+    text = re.sub(r"[^\w\s]|_", " ", text.lower())
     return [t for t in text.split() if t]
 
 # ---------------------------------------------------------
@@ -268,11 +268,13 @@ def identify_brand_by_similarity(domain_input: str) -> Optional[Dict]:
 
     return mejor_match
 
-# SIGUIENTE: mejorar este proceso
 def guess_brand_from_whois(owner_str: str, max_results: int = 3) -> List[Dict]:
     """
     Devuelve las marcas más probables en función del WHOIS owner.
     Pondera fuertemente 'domain_search' y usa un sistema de puntos por token para 'owner_terms'.
+    * Se puntúa sobre la cadena / tokens ENTRANTE
+    * Cada vez que un token entrante se encuentr en OT se obtiene 1pt
+    * La puntuación total se calcula sobre la longitud de los tokens entrantes
     """
     client = get_opensearch_client()
     
@@ -280,48 +282,51 @@ def guess_brand_from_whois(owner_str: str, max_results: int = 3) -> List[Dict]:
     if not owner_str:
         return []
 
-    # Limpiamos y tokenizamos. Descartamos caracteres sueltos (len < 2) porque 
-    # no tenemos analizadores para 1-gram y solo meterían ruido.
+    # Tokenización del input
     tokens = [t for t in owner_str.split() if len(t) >= 2]
 
-    # 1. Cláusula original para domain_search (Se mantiene igual)
+    # 1. Cláusula de dominio (mantiene el boost alto)
     should_clauses = [
         {
             "match": {
                 "domain_search": {
                     "query": owner_str,
-                    "boost": 5,
+                    "boost": 10,  # Aumentamos un poco para que mande sobre los términos
                     "fuzziness": "AUTO"
                 }
             }
         }
     ]
 
-    # 2. Nueva lógica de "Puntos" para owner_terms
+    # 2. Lógica de "Puntos" por tokens entrantes
     if tokens:
         owner_terms_should = []
         
         for token in tokens:
-            # Redirección dinámica según la longitud de la palabra
-            campo_objetivo = "owner_terms.2gram" if len(token) == 2 else "owner_terms.3gram"
+            campo_objetivo = "owner_terms.2gram" if len(token) == 4 else "owner_terms.3gram"
             
+            # USAMOS CONSTANT_SCORE:
+            # Esto elimina la penalización por el tamaño del campo en el índice.
+            # Si el token existe, suma exactamente 1.0 al score, sin importar
+            # si el owner_terms tiene 10 o 1000 palabras.
             owner_terms_should.append({
-                "match": {
-                    campo_objetivo: {
-                        "query": token,
-                        "minimum_should_match": "75%", # Exige que el 75% de los n-gramas de esta palabra coincidan
-                        "boost": 1 # Cada palabra validada suma "1 punto"
-                    }
+                "constant_score": {
+                    "filter": {
+                        "match": {
+                            campo_objetivo: {
+                                "query": token,
+                                "minimum_should_match": "75%"
+                            }
+                        }
+                    },
+                    "boost": 1.0  # Cada palabra del INPUT que matchee vale 1 punto
                 }
             })
         
-        # ¿Cuántos puntos (palabras) consideramos "suficientes" para un match real?
-        # Usar un porcentaje es la forma más dinámica de gestionarlo sea cual sea el tamaño del array.
-        # Por ejemplo, pedimos que al menos el 60% de las palabras del input coincidan. 
-        # Si son 3 palabras, pedirá 2. Si son 5, pedirá 3.
+        # % de coincidencia basado exclusivamente en los tokens ENTRANTES
+        # Si entran 10 palabras y pides 60%, necesitas 6 aciertos para puntuar.
         puntos_necesarios = "60%" if len(tokens) > 2 else 1
 
-        # Anidamos el sistema de puntos dentro del query principal
         should_clauses.append({
             "bool": {
                 "should": owner_terms_should,
@@ -334,9 +339,11 @@ def guess_brand_from_whois(owner_str: str, max_results: int = 3) -> List[Dict]:
         "query": {
             "bool": {
                 "should": should_clauses,
-                "minimum_should_match": 1 # Exige que al menos domain_search o el bloque de owner_terms hagan match
+                "minimum_should_match": 1
             }
-        }
+        },
+        # OPCIONAL: Para ver cuánto match hizo realmente cada uno
+        "stats": ["whois_guess"]
     }
 
     resp = client.search(index=INDEX_KNOWN_BRANDS, body=body)
