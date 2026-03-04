@@ -28,7 +28,7 @@ async def get_domain_owner(domain: str) -> str:
     logger.debug(f"Fetching owner for domain: {domain}")
 
     if not domain:
-        return "No encontrado"
+        return None
 
     ext = tldextract.extract(domain)
 
