@@ -171,9 +171,8 @@ Response:
 | Verdict | Meaning |
 | :--- | :--- |
 | valid | Email is from a legitimate source. |
-| suspicious | Domain shows signs of spoofing. |
+| warning | Domain shows signs of spoofing. |
 | phishing | High confidence of malicious intent. |
-| invalid | Email format or domain doesn't exist. |
 
 
 ## 📚 Core Modules
